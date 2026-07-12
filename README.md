@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="assets/images/github/banner.png" alt="Internship Management System Banner" width="100%">
+</p>
+
+<br>
 # 🎓 Internship Management System
 
 > A modern full-stack Internship Management Portal developed using **PHP**, **MySQL**, **JavaScript**, **Bootstrap**, and **Hostinger**, designed to streamline internship management for colleges.
