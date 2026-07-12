@@ -1,0 +1,15 @@
+uploads/
+
+config.php
+
+*.log
+
+.env
+database.sql.sql
+node_modules/
+
+vendor/
+
+.idea
+
+.vscode
