@@ -171,16 +171,47 @@ localhost/Internship-Management-System
 
 ---
 
+---
+
 # 📸 Screenshots
 
-Coming Soon
+## 🔐 Login Page
 
-- Student Dashboard
-- Faculty Dashboard
-- Admin Dashboard
-- Analytics
-- Login
+<p align="center">
+  <img src="assets/images/github/login.png" width="100%">
+</p>
 
+---
+
+## 🎓 Student Dashboard
+
+<p align="center">
+  <img src="assets/images/github/student-dashboard.png" width="100%">
+</p>
+
+---
+
+## 👨‍🏫 Faculty Dashboard
+
+<p align="center">
+  <img src="assets/images/github/faculty-dashboard.png" width="100%">
+</p>
+
+---
+
+## 🛡️ Admin Dashboard
+
+<p align="center">
+  <img src="assets/images/github/admin-dashboard.png" width="100%">
+</p>
+
+---
+
+## 📊 Analytics Dashboard
+
+<p align="center">
+  <img src="assets/images/github/analytics.png" width="100%">
+</p>
 ---
 
 # 📈 Future Improvements
