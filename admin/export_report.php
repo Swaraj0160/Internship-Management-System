@@ -9,34 +9,182 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin')
     exit();
 }
 
-$division = $_GET['division'];
+/* -----------------------------------------------------------------
+   REPLACE — this is the actual Reports-module report generator that
+   admin/reports.php's "View Report" form submits to. The audit
+   (earlier this session) found this file completely untouched, with
+   several real problems fixed here:
 
-$query = "
+   1. SQL injection: $_GET['division'] was concatenated directly into
+      the query with no escaping. Converted to a prepared statement.
+   2. XSS: every value (division, roll_no, full_name, company_name,
+      etc.) was echoed with no escaping.
+   3. Only a single division could ever be viewed — no "All
+      Divisions" option existed in admin/reports.php's dropdown
+      either (that dropdown was also missing IT-DA/IT-SMAD entirely
+      before this session; both gaps are now fixed).
+   4. No IT-DA-first / IT-SMAD-second / numeric-roll ordering.
+   5. The only export option was a link to download_excel.php (the
+      legacy HTML-served-as-.xls file, the same mechanism responsible
+      for the Oct-50/Dec-50 bug elsewhere in the project). Replaced
+      with real Export Excel (.xlsx via ExcelExporter) and Export PDF
+      (via PdfExporter) buttons, matching the same export mechanism
+      used for Student Evaluations.
+   6. No sidebar — added, consistent with every other admin page.
+   ----------------------------------------------------------------- */
 
-SELECT 
-users.full_name,
-users.division,
-users.roll_no,
-internships.company_name,
-internships.internship_role,
-internships.internship_type,
-internships.start_date,
-internships.end_date,
-internships.status
+$division = trim($_GET['division'] ?? '');
+$export = trim($_GET['export'] ?? '');
 
-FROM users
+$divisions = ($division !== '' && $division !== 'ALL') ? [$division] : [];
 
-LEFT JOIN internships
-ON internships.student_id = users.id
+$where = ["users.role='student'"];
+$params = [];
+$types = "";
 
-WHERE users.division='$division'
-AND users.role='student'
+if(!empty($divisions))
+{
+    $where[] = "users.division=?";
+    $params[] = $divisions[0];
+    $types .= "s";
+}
 
-ORDER BY CAST(users.roll_no AS UNSIGNED) ASC
+$whereSql = implode(" AND ", $where);
 
+$sql = "
+    SELECT
+        users.full_name,
+        users.division,
+        users.roll_no,
+        users.enrollment_no,
+
+        internships.company_name,
+        internships.internship_role,
+        internships.internship_type,
+        internships.start_date,
+        internships.end_date,
+        internships.status
+
+    FROM users
+
+    LEFT JOIN internships
+        ON internships.id = (
+            SELECT MAX(i.id) FROM internships i WHERE i.student_id = users.id
+        )
+
+    WHERE $whereSql
+
+    ORDER BY
+        CASE users.division
+            WHEN 'IT-DA'   THEN 0
+            WHEN 'IT-SMAD' THEN 1
+            ELSE 2
+        END ASC,
+        users.division ASC,
+        CAST(users.roll_no AS UNSIGNED) ASC
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = $conn->prepare($sql);
+
+if(count($params) > 0)
+{
+    $stmt->bind_param($types, ...$params);
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
+
+$rows = [];
+while($row = mysqli_fetch_assoc($result))
+{
+    $rows[] = $row;
+}
+
+$division_label = ($division !== '' && $division !== 'ALL') ? $division : "All Divisions";
+
+/* -----------------------------------------------------------------
+   EXPORT — Excel (.xlsx) and PDF, both real files, both built from
+   the exact same $rows the on-screen table renders, so they can
+   never drift apart.
+   ----------------------------------------------------------------- */
+
+if($export === 'excel')
+{
+    require_once __DIR__ . '/../lib/ExcelExporter.php';
+
+    $headers = [
+        "Roll No", "Enrollment No", "Student Name", "Division",
+        "Company", "Role", "Internship Type", "Start Date", "End Date", "Status"
+    ];
+
+    $columnMap = [
+        "Roll No"          => "roll_no",
+        "Enrollment No"    => "enrollment_no",
+        "Student Name"     => "full_name",
+        "Division"         => "division",
+        "Company"          => "company_name",
+        "Role"             => "internship_role",
+        "Internship Type"  => "internship_type",
+        "Start Date"       => "start_date",
+        "End Date"         => "end_date",
+        "Status"           => "status",
+    ];
+
+    try {
+        ExcelExporter::streamStudentReport(
+            "MIT Art, Design and Technology University — Internship Report",
+            "Division: " . $division_label . "   |   Total Students: " . count($rows),
+            $headers,
+            $rows,
+            $columnMap,
+            "Internship_Report_" . ($division !== '' && $division !== 'ALL' ? $division : "All_Divisions"),
+            "Internship Report"
+        );
+    } catch (ExcelExporterException $e) {
+        ExcelExporter::renderSetupError($e->getMessage());
+    }
+
+    exit();
+}
+
+if($export === 'pdf')
+{
+    require_once __DIR__ . '/../lib/PdfExporter.php';
+
+    $headers = ["Roll No", "Student Name", "Division", "Company", "Role", "Type", "Start", "End", "Status"];
+    $columnWidths = [7, 15, 8, 14, 12, 12, 8, 8, 8];
+
+    $pdfRows = [];
+    foreach($rows as $r)
+    {
+        $pdfRows[] = [
+            $r['roll_no'],
+            $r['full_name'],
+            $r['division'],
+            $r['company_name'] ?: '-',
+            $r['internship_role'] ?: '-',
+            $r['internship_type'] ?: '-',
+            $r['start_date'] ?: '-',
+            $r['end_date'] ?: '-',
+            $r['status'] ?: 'Not Applied',
+        ];
+    }
+
+    $subtitle = "Division: " . $division_label . "   |   Total Students: " . count($rows) .
+        "   |   Generated: " . date('d M Y, h:i A');
+
+    PdfExporter::streamEvaluationTable(
+        "MIT Art, Design and Technology University",
+        "Internship Report",
+        $subtitle,
+        $headers,
+        $columnWidths,
+        $pdfRows,
+        "Internship_Report_" . ($division !== '' && $division !== 'ALL' ? $division : "All_Divisions")
+    );
+
+    exit();
+}
 
 ?>
 
@@ -47,17 +195,22 @@ $result = mysqli_query($conn, $query);
 <title>Division Report</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 
 <style>
 
 body{
     background:#f5f7fb;
+    margin:0;
+}
+
+.page-inner{
+    padding:0 24px 40px;
 }
 
 .container-box{
-    width:95%;
-    margin:35px auto;
+    width:100%;
+    margin:24px auto;
     background:#fff;
     padding:35px;
     border-radius:20px;
@@ -69,6 +222,8 @@ body{
     justify-content:space-between;
     align-items:center;
     margin-bottom:25px;
+    flex-wrap:wrap;
+    gap:16px;
 }
 
 .report-title h2{
@@ -84,6 +239,7 @@ body{
 .action-buttons{
     display:flex;
     gap:10px;
+    flex-wrap:wrap;
 }
 
 .table{
@@ -134,11 +290,11 @@ background:white;
 </head>
 
 <body>
-    
 
+<?php $activePage = 'reports.php'; include __DIR__ . '/includes/sidebar_nav.php'; ?>
+
+<div class="page-inner">
 <div class="container-box">
-
-    
 
     <div class="report-header">
 
@@ -160,7 +316,9 @@ Internship Report
 <p>
 
 Division :
-<strong><?php echo $division; ?></strong>
+<strong><?php echo htmlspecialchars($division_label, ENT_QUOTES, 'UTF-8'); ?></strong>
+&nbsp;|&nbsp;
+Total Students : <strong><?php echo count($rows); ?></strong>
 
 </p>
 
@@ -176,10 +334,17 @@ class="btn btn-dark">
 
 </button>
 
-<a href="download_excel.php?division=<?php echo $division; ?>"
+<a href="export_report.php?division=<?php echo urlencode($division); ?>&export=excel"
 class="btn btn-success">
 
-📥 Download Excel
+📊 Export Excel
+
+</a>
+
+<a href="export_report.php?division=<?php echo urlencode($division); ?>&export=pdf"
+class="btn btn-danger">
+
+📄 Export PDF
 
 </a>
 
@@ -196,6 +361,7 @@ class="btn btn-success">
             <tr>
 
                 <th>Roll No</th>
+                <th>Enrollment No</th>
                 <th>Student</th>
                 <th>Division</th>
                 <th>Company</th>
@@ -211,45 +377,53 @@ class="btn btn-success">
 
         <tbody>
 
-        <?php
+        <?php if(count($rows) === 0): ?>
 
-        while($row = mysqli_fetch_assoc($result))
-        {
+        <tr>
+            <td colspan="10" class="text-center text-danger">
+                No students found for this division.
+            </td>
+        </tr>
 
-        ?>
+        <?php else: ?>
+        <?php foreach($rows as $row): ?>
 
         <tr>
 
             <td>
-                <?php echo $row['roll_no']; ?>
+                <?php echo htmlspecialchars($row['roll_no'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['full_name']; ?>
+                <?php echo htmlspecialchars($row['enrollment_no'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['division']; ?>
+                <?php echo htmlspecialchars($row['full_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['company_name'] ? $row['company_name'] : '-'; ?>
+                <?php echo htmlspecialchars($row['division'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['internship_role'] ? $row['internship_role'] : '-'; ?>
+                <?php echo htmlspecialchars($row['company_name'] ?: '-', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['internship_type'] ? $row['internship_type'] : '-'; ?>
+                <?php echo htmlspecialchars($row['internship_role'] ?: '-', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['start_date'] ? $row['start_date'] : '-'; ?>
+                <?php echo htmlspecialchars($row['internship_type'] ?: '-', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['end_date'] ? $row['end_date'] : '-'; ?>
+                <?php echo htmlspecialchars($row['start_date'] ?: '-', ENT_QUOTES, 'UTF-8'); ?>
+            </td>
+
+            <td>
+                <?php echo htmlspecialchars($row['end_date'] ?: '-', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
@@ -279,11 +453,8 @@ class="btn btn-success">
 
         </tr>
 
-        <?php
-
-        }
-
-        ?>
+        <?php endforeach; ?>
+        <?php endif; ?>
 
         </tbody>
 
@@ -291,6 +462,12 @@ class="btn btn-success">
     </div>
 
 </div>
+</div>
+
+</main>
+</div>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 </html>

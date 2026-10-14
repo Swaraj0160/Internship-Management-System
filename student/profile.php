@@ -66,12 +66,16 @@ if(isset($_POST['update']))
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Profile</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 
 <style>
 
@@ -79,39 +83,41 @@ if(isset($_POST['update']))
 *, *::before, *::after { box-sizing: border-box; }
 
 body{
-    background:#f1f5f9;
-    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:#f5f7fb;
+    font-family:'Inter',system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:#0f172a;
     min-height:100vh;
-    padding:20px;
-    color:#1e293b;
+    margin:0;
+}
+
+.page-inner{
+    padding:28px 25px 60px;
 }
 
 /* ---------- Page header ---------- */
 .page-header{
+    max-width:1200px;
     width:100%;
+    margin:0 auto 18px;
     display:flex;
+    justify-content:flex-start;
     align-items:center;
-    margin-bottom:15px;
-    padding-left:8px;
 }
 
-.page-header-text-wrapper{
-    margin-left:20px;
-}
-.page-header-text h1 { font-size: 20px; font-weight: 500; margin: 0; }
-.page-header-text p  { font-size: 13px; color: #64748b; margin: 2px 0 0; }
 .btn-back{
     display:inline-flex;
     align-items:center;
     gap:8px;
-    background:#1d6ef5;
+    background:linear-gradient(90deg,#2563eb,#3b82f6);
     color:#fff;
-    padding:9px 18px;
-    border-radius:10px;
+    padding:11px 22px;
+    border-radius:999px;
     text-decoration:none;
     font-size:16px;
     font-weight:600;
-    transition:.3s;
+    transition:transform .15s ease, box-shadow .15s ease;
+    border:none;
+    box-shadow:0 6px 16px rgba(37,99,235,.28);
 }
 
 .btn-back i{
@@ -119,166 +125,250 @@ body{
 }
 
 .btn-back:hover{
-    background:#0b5ed7;
     color:#fff;
+    transform:translateY(-1px);
+    box-shadow:0 8px 20px rgba(37,99,235,.35);
 }
 
-.btn-back i{
-    font-size:18px;
+/* ---------- Page title ---------- */
+.page-title{
+    max-width:1200px;
+    margin:0 auto 22px;
 }
 
-.btn-back:hover{
-    background:#0b5ed7;
-    color:#fff;
+.page-title h1{
+    font-size:38px;
+    line-height:1.15;
+    font-weight:800;
+    color:#0f172a;
+    margin-bottom:6px;
+    letter-spacing:-.01em;
 }
-.btn-back:hover { border-color: #cbd5e1; background: #f8fafc; color: #1e293b; }
+
+.page-title p{
+    font-size:17px;
+    margin-bottom:0;
+    color:#64748b;
+}
 
 /* ---------- Card ---------- */
-.profile-card {
-    width:100%;
-    max-width:1200px;
-    margin:auto;
+.form-box {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
     background: #fff;
-    border-radius: 16px;
-    border: 0.5px solid #e2e8f0;
-    overflow: hidden;
-}
-
-/* ---------- Banner + avatar ---------- */
-.profile-banner {
-    height: 90px;
-    background: linear-gradient(135deg, #4b0082 0%, #7c3aed 100%);
-    position: relative;
-}
-
-.avatar-wrap {
-    position: absolute;
-    bottom:-45px;
-    left:30px;
-}
-
-.profile-photo {
-    width:95px;
-    height:95px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 5px solid #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,.12);
-    display: block;
-}
-
-/* ---------- Card body ---------- */
-.card-body {
-    padding:58px 28px 24px;
-}
-
-/* ---------- User meta ---------- */
-.user-meta { margin-bottom: 18px; }
-.user-meta h2 { font-size: 22px; font-weight: 700; margin: 0; }
-.user-meta .email { font-size: 14px; color: #64748b; margin: 3px 0 8px; }
-.badge-role {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: #ede9fe;
-    color: #5b21b6;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 6px 14px;
     border-radius: 20px;
+    border: 1px solid #eef1f6;
+    overflow: hidden;
+    box-shadow: 0 18px 45px rgba(15,23,42,.06);
+    animation: fadeIn .35s ease;
+}
+
+@keyframes fadeIn{
+    from{ opacity:0; transform:translateY(6px); }
+    to{ opacity:1; transform:translateY(0); }
+}
+
+/* ---------- Card header strip ---------- */
+.card-header-strip {
+    height: 5px;
+    background: linear-gradient(90deg, #2563eb 0%, #7c3aed 100%);
+}
+
+.card-inner{
+    padding:32px;
+}
+
+/* ---------- Card title ---------- */
+.card-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+}
+
+.card-title-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 15px;
+    background: #ede9fe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.card-title-icon i {
+    font-size: 26px;
+    color: #7c3aed;
+}
+
+.card-title h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.card-title p {
+    font-size: 14px;
+    color: #94a3b8;
+    margin: 2px 0 0;
+}
+
+/* ---------- Profile summary row (replaces the old banner) ---------- */
+.profile-summary{
+    display:flex;
+    align-items:center;
+    gap:20px;
+    background:#f8fafc;
+    border:1px solid #eef1f6;
+    border-radius:14px;
+    padding:22px 26px;
+    margin-bottom:26px;
+}
+
+.profile-summary-avatar{
+    width:84px;
+    height:84px;
+    border-radius:50%;
+    object-fit:cover;
+    border:3px solid #fff;
+    box-shadow:0 6px 16px rgba(15,23,42,.1);
+    flex-shrink:0;
+    display:block;
+}
+
+.profile-summary-text h2{
+    font-size:22px;
+    font-weight:800;
+    color:#0f172a;
+    margin:0 0 4px;
+    letter-spacing:-.01em;
+}
+
+.profile-summary-text .email{
+    font-size:14.5px;
+    color:#64748b;
+    margin:0 0 10px;
+}
+
+.status-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:#ede9fe;
+    color:#5b21b6;
+    font-size:13px;
+    font-weight:700;
+    padding:4px 12px;
+    border-radius:999px;
 }
 
 /* ---------- Section label ---------- */
 .section-label {
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 700;
     color: #94a3b8;
-    letter-spacing: .06em;
+    letter-spacing: .08em;
     text-transform: uppercase;
-    margin-bottom: 14px;
-    padding-bottom: 8px;
-    border-bottom: 0.5px solid #f1f5f9;
+    margin-bottom: 16px;
 }
 
 /* ---------- Fields ---------- */
 .field-grid{
     display:grid;
     grid-template-columns:repeat(2,1fr);
-    gap:14px;
-    margin-bottom:14px;
+    gap:0 20px;
 }
 
-@media (max-width: 520px) {
-    .field-grid { grid-template-columns: 1fr; }
+@media (max-width: 520px){
+    .field-grid{ grid-template-columns:1fr; }
+}
+
+.field {
+    margin-bottom: 20px;
 }
 
 .field label {
     font-size: 15px;
     font-weight: 600;
-    color: #475569;
-    margin-bottom: 5px;
+    color: #334155;
+    margin-bottom: 8px;
     display: block;
 }
 
-.field input {
-    width: 100%;
-    height: 44px;
-    border: 0.5px solid #e2e8f0;
+.field .form-control,
+.field .form-select {
+    height: 50px;
+    border: 1px solid #e5e7eb;
     border-radius: 10px;
-    padding: 0 12px;
     font-size: 15px;
-    color: #1e293b;
+    color: #0f172a;
     background: #fff;
+    padding: 0 15px;
     outline: none;
     transition: border-color .15s, box-shadow .15s;
+    box-shadow: none;
+    width:100%;
 }
 
-.field input:focus {
+.field .form-control:focus,
+.field .form-select:focus {
     border-color: #7c3aed;
-    box-shadow: 0 0 0 3px rgba(124,58,237,.08);
+    box-shadow: 0 0 0 3px rgba(124,58,237,.1);
 }
 
-.field input:disabled {
-    background: #f8fafc;
-    color: #94a3b8;
-    cursor: not-allowed;
+.field .form-control:disabled{
+    background:#f8fafc;
+    color:#94a3b8;
+    cursor:not-allowed;
 }
 
 /* ---------- Upload zone ---------- */
 .upload-zone {
-    border: 0.5px dashed #c4b5fd;
-    border-radius: 10px;
-    padding:22px 20px;
+    border: 1.5px dashed #c4b5fd;
+    border-radius: 14px;
+    padding:44px 20px;
     text-align: center;
-    background: #faf5ff;
-    cursor: pointer;
-    transition: border-color .15s, background .15s;
-    margin-bottom: 18px;
+    background: #faf7ff;
     position: relative;
+    transition: border-color .15s, background .15s;
+    cursor: pointer;
 }
 
+.upload-zone.dragover,
 .upload-zone:hover {
     border-color: #7c3aed;
-    background: #f5f0ff;
+    background: #f4edff;
 }
 
 .upload-zone i {
-    font-size: 28px;
-    color: #a78bfa;
+    font-size:36px;
+    color: #7c3aed;
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
+    background:#ede9fe;
+    width:64px;
+    height:64px;
+    line-height:64px;
+    border-radius:50%;
+    margin-left:auto;
+    margin-right:auto;
 }
 
 .upload-zone .upload-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #5b21b6;
+    font-size:17px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
 }
 
 .upload-zone .upload-hint {
-    font-size: 12px;
+    font-size: 14px;
     color: #94a3b8;
-    margin-top: 2px;
+    margin: 4px 0 0;
 }
 
 .upload-zone input[type="file"] {
@@ -290,106 +380,199 @@ body{
     height: 100%;
 }
 
+.upload-selected-file{
+    margin-top:15px;
+    font-weight:600;
+    color:#16a34a;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+}
+
+.upload-selected-file i{
+    font-size:18px;
+}
+
 /* ---------- Actions ---------- */
 .form-actions {
     display: flex;
-    gap: 10px;
+    gap: 14px;
+    margin-top:6px;
 }
 
-.btn-cancel {
-    height: 46px;
-    padding: 0 20px;
-    background: #fff;
-    color: #475569;
-    border: 0.5px solid #e2e8f0;
-    border-radius: 9px;
-    border-radius:10px;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all .15s;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
+.btn-cancel{
+    flex:1;
+    height:54px;
+    border-radius:12px;
+    font-size:15px;
+    font-weight:700;
+    background:#fff;
+    border:1px solid #e2e8f0;
+    color:#334155;
+    cursor:pointer;
+    text-decoration:none;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:background .15s ease, border-color .15s ease, transform .15s ease;
 }
 
-.btn-cancel:hover {
-    border-color: #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
+.btn-cancel:hover{
+    background:#f8fafc;
+    border-color:#cbd5e1;
+    color:#334155;
+    transform:translateY(-1px);
 }
 
-.btn-save {
-    flex: 1;
-    height: 46px;
-    background: #4b0082;
-    color: #fff;
-    border: none;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background .15s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+.btn-submit{
+    flex:2;
+    height:54px;
+    background:linear-gradient(90deg,#7c3aed,#4f46e5);
+    border:none;
+    color:#fff;
+    font-size:17px;
+    font-weight:700;
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    transition:transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+    box-shadow:0 10px 24px rgba(79,70,229,.25);
+    cursor:pointer;
 }
 
+.btn-submit:hover {
+    transform:translateY(-1px);
+    box-shadow:0 12px 28px rgba(79,70,229,.32);
+    color:#fff;
+}
 
-.btn-save:hover { background: #3b0066; }
+@media (max-width: 520px){
+    .form-actions{ flex-direction:column; }
+    .btn-submit{ flex:1; }
+}
+
+/* ---------- Info card ---------- */
+.info-card{
+    background:#f5f3ff;
+    border-radius:16px;
+    padding:24px;
+    height:100%;
+}
+
+.info-card h3{
+    color:#4f46e5;
+    font-size:19px;
+    margin-bottom:16px;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.info-card h4{
+    color:#4f46e5;
+    font-size:16px;
+    margin-top:20px;
+    margin-bottom:8px;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.info-card ul{
+    padding-left:20px;
+    margin-bottom:0;
+}
+
+.info-card li{
+    margin-bottom:10px;
+    font-size:14.5px;
+    line-height:1.5;
+    color:#475569;
+}
+
+.info-card p{
+    font-size:14.5px;
+    color:#64748b;
+    line-height:1.5;
+    margin:0;
+}
+
+.info-card hr{
+    border-color:#e0e0fa;
+    margin:18px 0 0;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 767px){
+    .page-title h1{ font-size:30px; }
+    .card-inner{ padding:22px; }
+    .profile-summary{ flex-direction:column; text-align:center; }
+}
 
 </style>
+
 </head>
 <body>
 
-<div class="page-header">
+<?php $activePage = 'profile.php'; include __DIR__ . '/includes/sidebar_nav.php'; ?>
 
-    <a href="dashboard.php" class="btn-back">
-        <i class="ti ti-arrow-left"></i>
-        Back
-    </a>
+<div class="page-inner">
 
-    <div class="page-header-text-wrapper">
+<div class="page-title">
 
-        <div class="page-header-text">
-            <h1>    My Profile</h1>
-            <p>Manage your personal information and preferences</p>
-        </div>
+    <h1>My Profile</h1>
 
-    </div>
+    <p>
+        Manage your personal information and preferences.
+    </p>
 
 </div>
 
-<div class="profile-card">
+<!-- Card -->
+<div class="form-box">
 
-    <!-- Banner + avatar -->
-    <div class="profile-banner">
-        <div class="avatar-wrap">
+    <div class="card-header-strip"></div>
+
+    <div class="card-inner">
+
+<div class="row g-4 align-items-start">
+
+<div class="col-lg-8">
+
+        <div class="card-title">
+            <div class="card-title-icon">
+                <i class="ti ti-user-circle" aria-hidden="true"></i>
+            </div>
+            <div>
+                <h2>Profile information</h2>
+                <p>Update your details and profile photo</p>
+            </div>
+        </div>
+
+        <div class="profile-summary">
             <?php if(!empty($user['profile_photo'])): ?>
                 <img src="../uploads/profile_photos/<?php echo htmlspecialchars($user['profile_photo']); ?>"
-                     class="profile-photo" alt="Profile photo">
+                     class="profile-summary-avatar" id="avatarPreview" alt="Profile photo">
             <?php else: ?>
                 <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png"
-                     class="profile-photo" alt="Default profile photo">
+                     class="profile-summary-avatar" id="avatarPreview" alt="Default profile photo">
             <?php endif; ?>
-        </div>
-    </div>
-
-    <div class="card-body">
-
-        <!-- Name + role badge -->
-        <div class="user-meta">
-            <h2><?php echo htmlspecialchars($user['full_name']); ?></h2>
-            <p class="email"><?php echo htmlspecialchars($user['email']); ?></p>
-            <span class="badge-role">
-                <i class="ti ti-user-check" style="font-size:11px"></i> Student
-            </span>
+            <div class="profile-summary-text">
+                <h2><?php echo htmlspecialchars($user['full_name']); ?></h2>
+                <p class="email"><?php echo htmlspecialchars($user['email']); ?></p>
+                <span class="status-pill">
+                    <i class="ti ti-user-check" style="font-size:12px"></i> Student
+                </span>
+            </div>
         </div>
 
         <form method="POST" enctype="multipart/form-data">
 
-            <!-- Personal info -->
             <p class="section-label">Personal information</p>
 
             <div class="field-grid">
@@ -399,6 +582,7 @@ body{
                     <input type="text"
                            id="full_name"
                            name="full_name"
+                           class="form-control"
                            value="<?php echo htmlspecialchars($user['full_name']); ?>"
                            placeholder="Enter your full name"
                            required>
@@ -409,6 +593,7 @@ body{
                     <input type="text"
                            id="phone"
                            name="phone"
+                           class="form-control"
                            value="<?php echo htmlspecialchars($user['phone']); ?>"
                            placeholder="Enter phone number">
                 </div>
@@ -418,41 +603,181 @@ body{
                     <input type="text"
                            id="department"
                            name="department"
+                           class="form-control"
                            value="<?php echo htmlspecialchars($user['department']); ?>"
                            placeholder="Enter your department">
                 </div>
 
                 <div class="field">
-                    <label>Email address</label>
+                    <label for="email_display">Email address</label>
                     <input type="email"
+                           id="email_display"
+                           class="form-control"
                            value="<?php echo htmlspecialchars($user['email']); ?>"
                            disabled>
                 </div>
 
             </div>
 
-            <!-- Photo upload -->
             <p class="section-label">Profile photo</p>
 
-            <div class="upload-zone">
-                <i class="ti ti-upload" aria-hidden="true"></i>
-                <p class="upload-title">Click to upload a new photo</p>
-                <p class="upload-hint">JPG, JPEG or PNG &mdash; max 5 MB</p>
-                <input type="file" name="profile_photo" accept=".jpg,.jpeg,.png">
+            <div class="field">
+
+                <div class="upload-zone" id="photoUploadZone">
+                    <i class="ti ti-photo-up" aria-hidden="true"></i>
+                    <p class="upload-title" id="photoUploadTitle">Click to upload a new photo</p>
+                    <p class="upload-hint">Drag &amp; drop, or click to browse</p>
+                    <br>
+                    <p class="upload-hint">
+                        Allowed : JPG, JPEG, PNG
+                        <br>
+                        Maximum Size : <b>5 MB</b>
+                    </p>
+                    <input type="file"
+                           id="profile_photo"
+                           name="profile_photo"
+                           accept=".jpg,.jpeg,.png">
+                    <div id="photoSelectedFile" class="upload-selected-file"></div>
+                </div>
+
             </div>
 
-            <!-- Actions -->
             <div class="form-actions">
                 <a href="profile.php" class="btn-cancel">Cancel</a>
-                <button type="submit" name="update" class="btn-save">
-                    <i class="ti ti-check" style="font-size:16px"></i>
+                <button type="submit" name="update" class="btn-submit">
+                    <i class="ti ti-check" style="font-size:16px" aria-hidden="true"></i>
                     Save changes
                 </button>
             </div>
 
         </form>
+
+        </div>
+
+<div class="col-lg-4">
+
+<div class="info-card">
+
+<h3>
+<i class="ti ti-info-circle"></i>
+
+Profile Tips
+
+</h3>
+
+<ul>
+
+<li>Keep your full name accurate — it's used on official documents like your internship certificate.</li>
+
+<li>Add a phone number so your faculty coordinator can reach you quickly.</li>
+
+<li>Only JPG, JPEG or PNG files are accepted for your profile photo.</li>
+
+<li>Maximum photo size is <strong>5 MB</strong>.</li>
+
+</ul>
+
+<hr>
+
+<h4>
+
+<i class="ti ti-help-circle"></i>
+
+Need Help?
+
+</h4>
+
+<p>
+
+If you face any issue while updating your profile,
+contact your faculty coordinator.
+
+</p>
+
+</div>
+
+</div>
+
+</div>
+
     </div>
 </div>
+
+</div><!-- /.page-inner -->
+
+</main>
+</div>
+
+<script>
+
+const photoInput = document.getElementById("profile_photo");
+const photoSelectedFile = document.getElementById("photoSelectedFile");
+const photoUploadZone = document.getElementById("photoUploadZone");
+const photoUploadTitle = document.getElementById("photoUploadTitle");
+const avatarPreview = document.getElementById("avatarPreview");
+
+if(photoInput){
+
+    photoInput.addEventListener("change", function(){
+
+        if(this.files.length > 0){
+
+            const file = this.files[0];
+            const nameLower = file.name.toLowerCase();
+            const allowedExt = [".jpg", ".jpeg", ".png"];
+            const isAllowed = allowedExt.some(function(ext){
+                return nameLower.endsWith(ext);
+            });
+
+            if(!isAllowed){
+                alert("Only JPG, JPEG, PNG files allowed");
+                this.value = "";
+                photoSelectedFile.style.display = "none";
+                return;
+            }
+
+            if(file.size > 5 * 1024 * 1024){
+                alert("Only files up to 5 MB are allowed.");
+                this.value = "";
+                photoSelectedFile.style.display = "none";
+                return;
+            }
+
+            photoUploadTitle.innerHTML = file.name;
+
+            photoSelectedFile.style.display = "flex";
+            photoSelectedFile.innerHTML =
+                "<i class='ti ti-circle-check'></i> Photo Selected Successfully";
+
+            if(avatarPreview){
+                const reader = new FileReader();
+                reader.onload = function(e){
+                    avatarPreview.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+    });
+
+}
+
+if(photoUploadZone){
+    photoUploadZone.addEventListener("dragover", function(e){
+        e.preventDefault();
+        photoUploadZone.classList.add("dragover");
+    });
+    photoUploadZone.addEventListener("dragleave", function(){
+        photoUploadZone.classList.remove("dragover");
+    });
+    photoUploadZone.addEventListener("drop", function(){
+        photoUploadZone.classList.remove("dragover");
+    });
+}
+
+</script>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 </html>

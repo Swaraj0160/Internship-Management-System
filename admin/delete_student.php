@@ -9,28 +9,29 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin')
     exit();
 }
 
-$id = (int)$_GET['id'];
+$id = (int)($_GET['id'] ?? 0);
 $return = $_GET['return'] ?? "";
 
-mysqli_query($conn, "DELETE FROM users WHERE id=$id");
+/* Only allow safe query-string characters so this can never be used
+   for header/response manipulation. */
+$return = preg_replace('/[^A-Za-z0-9=&_\-\.%]/', '', $return);
 
-if($return != "")
+if($id > 0)
 {
-    header("Location: manage_students.php?$return");
+    $stmt = $conn->prepare("DELETE FROM users WHERE id=? AND role='student'");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+}
+
+if($return !== "")
+{
+    header("Location: manage_students.php?" . $return);
 }
 else
 {
     header("Location: manage_students.php");
 }
-exit();
-exit();
 
-$query = "DELETE FROM users
-          WHERE id='$id'";
-
-mysqli_query($conn, $query);
-
-header("Location: manage_students.php");
 exit();
 
 ?>

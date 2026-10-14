@@ -1,26 +1,44 @@
 <?php
 
+session_start();
 include("../config.php");
+
+header("Content-Type: application/json");
+
+if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin')
+{
+    http_response_code(403);
+    echo json_encode(["error" => "Unauthorized"]);
+    exit();
+}
 
 $division = $_GET['division'] ?? '';
 $type = $_GET['type'] ?? '';
 $company = $_GET['company'] ?? '';
 
 $where = [];
+$params = [];
+$types = "";
 
 if($division!='')
 {
-    $where[] = "u.division='".mysqli_real_escape_string($conn,$division)."'";
+    $where[] = "u.division=?";
+    $params[] = $division;
+    $types .= "s";
 }
 
 if($type!='')
 {
-    $where[] = "i.internship_type='".mysqli_real_escape_string($conn,$type)."'";
+    $where[] = "i.internship_type=?";
+    $params[] = $type;
+    $types .= "s";
 }
 
 if($company!='')
 {
-    $where[] = "i.company_name='".mysqli_real_escape_string($conn,$company)."'";
+    $where[] = "i.company_name=?";
+    $params[] = $company;
+    $types .= "s";
 }
 
 $sql = "
@@ -44,6 +62,14 @@ if(count($where)>0)
     $sql .= " AND ".implode(" AND ",$where);
 }
 
-$result=mysqli_query($conn,$sql);
+$stmt = $conn->prepare($sql);
+
+if(count($params) > 0)
+{
+    $stmt->bind_param($types, ...$params);
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
 
 echo json_encode(mysqli_fetch_assoc($result));

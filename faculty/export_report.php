@@ -18,7 +18,53 @@ $getFaculty = mysqli_query($conn,
 
 $faculty = mysqli_fetch_assoc($getFaculty);
 
-$division = $faculty['faculty_division'];
+/*
+ * MULTI-DIVISION FACULTY SUPPORT
+ * Read every division assigned through faculty_divisions.
+ * Fall back to users.faculty_division for older/single-division accounts.
+ */
+$faculty_divisions = [];
+
+$division_query = mysqli_query($conn, "
+    SELECT DISTINCT division
+    FROM faculty_divisions
+    WHERE faculty_id='$faculty_id'
+      AND division IS NOT NULL
+      AND TRIM(division) <> ''
+    ORDER BY division ASC
+");
+
+if($division_query)
+{
+    while($division_row = mysqli_fetch_assoc($division_query))
+    {
+        $division_value = trim((string)$division_row['division']);
+
+        if($division_value !== '' && !in_array($division_value, $faculty_divisions, true))
+        {
+            $faculty_divisions[] = $division_value;
+        }
+    }
+}
+
+if(empty($faculty_divisions) && !empty($faculty['faculty_division']))
+{
+    $faculty_divisions[] = trim((string)$faculty['faculty_division']);
+}
+
+/* Safely build the SQL IN list */
+$division_values = [];
+
+foreach($faculty_divisions as $division_value)
+{
+    $division_values[] = "'" . mysqli_real_escape_string($conn, $division_value) . "'";
+}
+
+$faculty_division_sql = !empty($division_values)
+    ? implode(',', $division_values)
+    : "''";
+
+$division = implode(', ', $faculty_divisions);
 
 $query = "
 
@@ -45,9 +91,12 @@ ON internships.id = (
 )
 
 WHERE users.role='student'
-AND users.division='$division'
+AND users.division IN ($faculty_division_sql)
 
-ORDER BY CAST(users.roll_no AS UNSIGNED) ASC
+ORDER BY
+    FIELD(users.division, 'IT-DA', 'IT-SMAD') ASC,
+    CAST(users.roll_no AS UNSIGNED) ASC,
+    users.full_name ASC
 
 ";
 
@@ -101,7 +150,7 @@ body{
 </a>
 
     <h2 class="mb-4">
-        Division Internship Report - <?php echo $division; ?>
+        Division Internship Report - <?php echo htmlspecialchars($division); ?>
     </h2>
 
     <div class="mb-3 no-print">

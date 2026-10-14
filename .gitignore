@@ -1,15 +1,64 @@
-uploads/
-
+# Configuration & Environment
 config.php
-
-*.log
-
 .env
-database.sql.sql
+.env.*
+
+# Uploads & User Generated Content
+uploads/*
+!uploads/.gitkeep
+uploads/certificates/*
+!uploads/certificates/.gitkeep
+uploads/reports/*
+!uploads/reports/.gitkeep
+uploads/weekly_reports/*
+!uploads/weekly_reports/.gitkeep
+uploads/offer_letters/*
+!uploads/offer_letters/.gitkeep
+uploads/profile_photos/*
+!uploads/profile_photos/.gitkeep
+
+# Database Dumps & Backups
+*.sql
+*.sql.gz
+*.dump
+!database/schema.sql
+
+# Real Student Records, Rosters & Marksheets
+*.xlsx
+*.xls
+*.csv
+domain_mapping.json
+domain_audit_report.txt
+
+# Temporary, Scratch & Diagnostic Scripts
+scratch/
+check_*.php
+test_*.php
+fix_*.php
+mk_pending.php
+dbtest.php
+*.py
+*.zip
+*.tar.gz
+
+# Logs & Error Reports
+*.log
+error_log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies
+vendor/
 node_modules/
 
-vendor/
-
-.idea
-
-.vscode
+# IDE & OS Artifacts
+.idea/
+.vscode/
+*.suo
+*.user
+*.useros
+*.sln.docstates
+.DS_Store
+Thumbs.db
+desktop.ini

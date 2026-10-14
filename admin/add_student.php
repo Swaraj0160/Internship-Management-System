@@ -11,25 +11,25 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin')
 
 if(isset($_POST['add_student']))
 {
-    $full_name = $_POST['full_name'];
-    $email = $_POST['email'];
+    $full_name = trim($_POST['full_name']);
+    $email = trim($_POST['email']);
     $password = $_POST['password'];
-    $department = $_POST['department'];
+    $department = trim($_POST['department']);
 
-    $enrollment_no = $_POST['enrollment_no'];
-    $division = $_POST['division'];
-    $roll_no = $_POST['roll_no'];
-    $phone = $_POST['phone'];
+    $enrollment_no = trim($_POST['enrollment_no']);
+    $division = trim($_POST['division']);
+    $roll_no = trim($_POST['roll_no']);
+    $phone = trim($_POST['phone']);
 
     $hashed_password = password_hash(
         $password,
         PASSWORD_DEFAULT
     );
 
-    $check = "SELECT * FROM users
-              WHERE email='$email'";
-
-    $check_result = mysqli_query($conn, $check);
+    $check = $conn->prepare("SELECT id FROM users WHERE email=?");
+    $check->bind_param("s", $email);
+    $check->execute();
+    $check_result = $check->get_result();
 
     if(mysqli_num_rows($check_result) > 0)
     {
@@ -37,33 +37,36 @@ if(isset($_POST['add_student']))
     }
     else
     {
-        $query = "INSERT INTO users
-        (
-            full_name,
-            email,
-            password,
-            role,
-            department,
-            enrollment_no,
-            division,
-            roll_no,
-            phone
-        )
+        $stmt = $conn->prepare(
+            "INSERT INTO users
+            (
+                full_name,
+                email,
+                password,
+                role,
+                department,
+                enrollment_no,
+                division,
+                roll_no,
+                phone
+            )
+            VALUES
+            (?, ?, ?, 'student', ?, ?, ?, ?, ?)"
+        );
 
-        VALUES
-        (
-            '$full_name',
-            '$email',
-            '$hashed_password',
-            'student',
-            '$department',
-            '$enrollment_no',
-            '$division',
-            '$roll_no',
-            '$phone'
-        )";
+        $stmt->bind_param(
+            "sssssss",
+            $full_name,
+            $email,
+            $hashed_password,
+            $department,
+            $enrollment_no,
+            $division,
+            $roll_no,
+            $phone
+        );
 
-        mysqli_query($conn, $query);
+        $stmt->execute();
 
         echo "<script>alert('Student Added Successfully');</script>";
     }
@@ -163,6 +166,9 @@ body{
                     required>
 
                 <option value="">Select Division</option>
+
+                <option>IT-SMAD</option>
+                <option>IT-DA</option>
 
                 <option>SY-1</option>
                 <option>SY-2</option>

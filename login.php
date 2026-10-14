@@ -221,398 +221,465 @@ alert('Invalid Password');
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-
-<title>MIT Internship Portal</title>
-
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet"
-href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<style>
-
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-}
-
-body{
-    font-family:'Segoe UI',sans-serif;
-    overflow:hidden;
-}
-
-.login-page{
-    width:100%;
-    height:100vh;
-    position:relative;
-}
-
-.background-image{
-    position:absolute;
-    inset:0;
-
-    background:url('assets/images/logo3.png.jpeg')
-    center center no-repeat;
-
-    background-size:cover;
-}
-
-.background-overlay{
-    position:absolute;
-    inset:0;
-
-    background:
-    linear-gradient(
-    90deg,
-    rgba(0,0,0,.15),
-    rgba(70,0,120,.45),
-    rgba(40,0,90,.65));
-}
-
-.login-card{
-
-    position:absolute;
-
-    right:4%;
-
-    top:50%;
-
-    transform:translateY(-50%);
-
-    width:520px;
-
-    padding:45px;
-
-    border-radius:30px;
-
-    background:
-    rgba(255,255,255,.12);
-
-    backdrop-filter:
-    blur(20px);
-
-    border:
-    1px solid rgba(255,255,255,.25);
-
-    box-shadow:
-    0 20px 50px rgba(0,0,0,.25);
-
-    color:white;
-}
-
-.logo-area{
-    text-align:center;
-    margin-bottom:20px;
-}
-
-.logo-area img{
-    width:180px;
-    height:auto;
-}
-
-.login-card h2{
-    text-align:center;
-    font-size:36px;
-    margin-bottom:10px;
-}
-
-.subtext{
-    text-align:center;
-    margin-bottom:35px;
-    color:#eee;
-}
-
-label{
-    display:block;
-    margin-bottom:8px;
-    font-weight:600;
-}
-
-.form-control{
-    height:58px;
-    border:none;
-    font-size:16px;
-    box-shadow:none;
-}
-
-.form-control:focus{
-    box-shadow:none;
-    border:none;
-}
-
-.input-group-text{
-    background:white;
-}
-
-.eye-btn{
-    cursor:pointer;
-    width:55px;
-    justify-content:center;
-}
-
-.eye-btn i{
-    font-size:18px;
-}
-
-.btn-login{
-
-    width:100%;
-    height:60px;
-
-    border:none;
-
-    border-radius:16px;
-
-    color:white;
-
-    font-size:20px;
-
-    font-weight:700;
-
-    letter-spacing:.5px;
-
-    background:
-    linear-gradient(
-    90deg,
-    #7c3aed,
-    #ec4899,
-    #f59e0b);
-
-    transition:.3s;
-}
-
-.btn-login:hover{
-
-    transform:translateY(-2px);
-
-    box-shadow:
-    0 10px 25px rgba(236,72,153,.35);
-}
-
-.features{
-
-    display:flex;
-
-    gap:10px;
-
-    margin-top:25px;
-}
-
-.feature-box{
-
-    flex:1;
-
-    text-align:center;
-
-    padding:16px 10px;
-
-    border-radius:14px;
-
-    background:#ffffff;
-
-    border:1px solid #e5e7eb;
-
-    color:#374151;
-
-    font-size:13px;
-
-    transition:.3s;
-
-    box-shadow:
-    0 8px 20px rgba(0,0,0,.08);
-}
-
-.feature-box:hover{
-
-    transform:translateY(-5px);
-
-    box-shadow:
-    0 12px 25px rgba(0,0,0,.15);
-}
-
-.feature-icon{
-    font-size:18px;
-    margin-bottom:8px;
-}
-
-.feature-title{
-    font-size:13px;
-    font-weight:600;
-    margin-bottom:4px;
-    color:#1f2937;
-}
-
-.feature-box small{
-    font-size:11px;
-    color:#6b7280;
-}
-
-@media(max-width:768px){
-
-.login-card{
-
-    width:92%;
-
-    left:4%;
-
-    right:4%;
-
-    transform:translateY(-50%);
-}
-
-.features{
-    flex-direction:column;
-}
-
-
-
-.feature-icon{
-    font-size:18px;
-    margin-bottom:8px;
-}
-
-.feature-title{
-    font-size:13px;
-    font-weight:600;
-    margin-bottom:4px;
-    color:#1f2937;
-}
-
-.feature-box:hover{
-    transform:translateY(-5px);
-    box-shadow:
-    0 12px 25px rgba(0,0,0,.15);
-}
-}
-</style>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIT Internship Portal - Login</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-dark: #3730a3;
+            --secondary: #ec4899;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border: #e2e8f0;
+            --input-bg: #ffffff;
+            --focus-ring: rgba(79, 70, 229, 0.15);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #f8fafc;
+            color: var(--text-main);
+            overflow-x: hidden;
+        }
+
+        .split-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Left: Hero Section */
+        .hero-section {
+            flex: 1.2;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            padding: 60px 80px;
+            color: white;
+            background-image: url('assets/images/newbg.png');
+            background-size: cover;
+            background-position: left center; /* Prevents center-right watermark clipping */
+            background-repeat: no-repeat;
+        }
+
+        .hero-overlay {
+            position: absolute;
+            inset: 0;
+            /* Carefully tuned gradient: darker on the left for text readability, fading slightly to reveal the campus */
+            background: linear-gradient(135deg, rgba(30, 6, 54, 0.85) 0%, rgba(67, 24, 113, 0.7) 60%, rgba(119, 43, 142, 0.4) 100%);
+            z-index: 1;
+        }
+
+        .hero-brand {
+            position: relative;
+            z-index: 2;
+            font-weight: 700;
+            font-size: 1.15rem;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: auto; /* Pushes content down to vertical center */
+        }
+        
+        .hero-brand i {
+            font-size: 1.4rem;
+            color: #fbcfe8;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            max-width: 540px;
+            margin: 40px 0;
+        }
+
+        .hero-content h1 {
+            font-size: 3.25rem;
+            font-weight: 800;
+            line-height: 1.15;
+            margin-bottom: 20px;
+            letter-spacing: -0.02em;
+            text-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .hero-content p {
+            font-size: 1.1rem;
+            line-height: 1.5;
+            opacity: 0.9;
+            margin-bottom: 0;
+            font-weight: 400;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        /* Refined, compact feature cards */
+        .hero-features {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            gap: 16px;
+            margin-top: auto; /* Pushes features to bottom */
+            flex-wrap: wrap;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 16px 20px;
+            border-radius: 12px;
+            flex: 1;
+            min-width: 160px;
+            transition: transform 0.3s ease, background 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .feature-icon {
+            font-size: 1.25rem;
+            margin-bottom: 10px;
+            color: #fbcfe8;
+            opacity: 0.9;
+        }
+
+        .feature-card h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            letter-spacing: 0.2px;
+        }
+
+        .feature-card p {
+            font-size: 0.8rem;
+            margin: 0;
+            opacity: 0.75;
+            line-height: 1.4;
+        }
+
+        /* Right: Login Section */
+        .login-section {
+            width: 100%;
+            max-width: 520px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Vertically centers the login panel */
+            padding: 60px 50px;
+            position: relative;
+            z-index: 10;
+            background: #ffffff;
+            box-shadow: -15px 0 40px rgba(0,0,0,0.04);
+        }
+
+        .login-inner {
+            width: 100%;
+            max-width: 380px;
+            margin: 0 auto;
+        }
+
+        .logo-area {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .logo-area img {
+            height: 75px;
+            width: auto;
+            object-fit: contain;
+        }
+
+        .login-header {
+            margin-bottom: 35px;
+            text-align: center;
+        }
+
+        .login-header h2 {
+            font-weight: 800;
+            font-size: 1.75rem;
+            color: var(--text-main);
+            margin-bottom: 8px;
+            letter-spacing: -0.01em;
+        }
+
+        .login-header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin: 0;
+        }
+
+        .form-label {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-main);
+            margin-bottom: 8px;
+        }
+
+        .input-group {
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+            background: var(--input-bg);
+            margin-bottom: 24px;
+        }
+        
+        .input-group:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px var(--focus-ring);
+        }
+
+        .input-group-text {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            padding: 0 16px;
+        }
+
+        .input-group:focus-within .input-group-text {
+            color: var(--primary);
+        }
+
+        .form-control {
+            border: none;
+            padding: 14px 16px 14px 0;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            background: transparent;
+            box-shadow: none !important;
+        }
+        
+        .form-control::placeholder {
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        .eye-btn {
+            cursor: pointer;
+            color: #94a3b8;
+            transition: color 0.2s;
+        }
+
+        .eye-btn:hover {
+            color: var(--primary);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            margin-top: 8px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+        }
+
+        .btn-login:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.25);
+            color: white;
+        }
+        
+        .btn-login:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+        }
+
+        .login-footer {
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        .login-footer p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.6;
+            opacity: 0.8;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .hero-section {
+                padding: 40px;
+            }
+            .hero-content h1 {
+                font-size: 2.75rem;
+            }
+        }
+        
+        @media (max-width: 991px) {
+            .split-layout {
+                flex-direction: column;
+            }
+            
+            /* On mobile, keep campus image as a compact top header */
+            .hero-section {
+                flex: none;
+                padding: 40px 24px;
+                min-height: 35vh;
+                justify-content: center;
+                background-position: center;
+            }
+            .hero-brand {
+                margin-bottom: 20px;
+            }
+            .hero-content {
+                margin: 0;
+            }
+            .hero-content h1 {
+                font-size: 2rem;
+                margin-bottom: 12px;
+            }
+            .hero-content p {
+                font-size: 1rem;
+            }
+            .hero-features {
+                display: none; /* Hide feature cards on small screens to prioritize login */
+            }
+            
+            /* Login panel overlaps slightly and takes full width */
+            .login-section {
+                max-width: 100%;
+                padding: 40px 24px;
+                border-radius: 24px 24px 0 0;
+                margin-top: -24px;
+                box-shadow: 0 -10px 30px rgba(0,0,0,0.08);
+                justify-content: flex-start;
+            }
+            .login-inner {
+                max-width: 400px;
+            }
+            .logo-area {
+                margin-bottom: 30px;
+            }
+            .login-footer {
+                margin-top: 40px;
+                padding-bottom: 20px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .hero-content h1 {
+                font-size: 1.75rem;
+            }
+            .login-section {
+                padding: 30px 20px;
+            }
+        }
+    </style>
 </head>
-
 <body>
 
-<div class="login-page">
+<div class="split-layout">
+    
+    <!-- Left: Campus Hero Section -->
+    <div class="hero-section">
+        <div class="hero-overlay"></div>
+        
+        <div class="hero-brand">
+            <i class="bi bi-mortarboard-fill"></i> MIT-ADT University
+        </div>
 
-    <div class="background-image"></div>
+        <div class="hero-content">
+            <h1>Your Journey From Learning to Real Impact</h1>
+            <p>Connect your learning with real-world experience and build your future.</p>
+        </div>
 
-    <div class="background-overlay"></div>
+        <div class="hero-features">
+            <div class="feature-card">
+                <div class="feature-icon"><i class="bi bi-briefcase-fill"></i></div>
+                <h3>Real Experience</h3>
+                <p>Bridge the gap between academia and industry.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="bi bi-graph-up-arrow"></i></div>
+                <h3>Career Growth</h3>
+                <p>Build a robust portfolio and network.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="bi bi-people-fill"></i></div>
+                <h3>Stronger Together</h3>
+                <p>Seamless campus collaboration.</p>
+            </div>
+        </div>
+    </div>
 
-    <div class="login-card">
-
-        <div class="logo-area">
-<img src="assets/images/logo.png" alt="MIT Logo">
-</div>
-
-        <h2>Welcome</h2>
-
-        <p class="subtext">
-    Sign in to continue to the MIT Internship Portal
-</p>
-
-        <form method="POST">
-
-            <label>Email Address</label>
-
-            <div class="input-group mb-3">
-                <span class="input-group-text">📧</span>
-               <input
-    type="email"
-    name="email"
-    class="form-control"
-    placeholder="Enter your email address"
-    required>
+    <!-- Right: Login Form Section -->
+    <div class="login-section">
+        <div class="login-inner">
+            <div class="logo-area">
+                <img src="assets/images/logo.png" alt="MIT Logo">
             </div>
 
-            <label>Password</label>
+            <div class="login-header">
+                <h2>Welcome Back</h2>
+                <p>Please sign in to access your dashboard</p>
+            </div>
 
-<div class="input-group mb-4">
+            <form method="POST">
+                <label class="form-label">Email Address</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-envelope-fill"></i></span>
+                    <input type="email" name="email" class="form-control" placeholder="Enter your email" required autocomplete="email">
+                </div>
 
-    <span class="input-group-text">
-        <i class="bi bi-lock-fill"></i>
-    </span>
+                <label class="form-label">Password</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+                    <input type="password" name="password" id="password" class="form-control" placeholder="Enter your password" required autocomplete="current-password">
+                    <span class="input-group-text eye-btn" onclick="togglePassword()" role="button" aria-label="Toggle password visibility">
+                        <i id="eyeIcon" class="bi bi-eye-fill"></i>
+                    </span>
+                </div>
 
-    <input
-        type="password"
-        name="password"
-        id="password"
-        class="form-control"
-        placeholder="Enter your password"
-        required>
-
-    <span
-        class="input-group-text eye-btn"
-        onclick="togglePassword()">
-
-        <i
-            id="eyeIcon"
-            class="bi bi-eye-fill">
-        </i>
-
-    </span>
-
-</div>
-
-            <button
-                type="submit"
-                name="login"
-                class="btn-login">
-                Sign In →
-            </button>
-
-        </form>
-
-<div class="features">
-
-    <div class="feature-box">
-        <div class="feature-icon">🛡</div>
-        <div class="feature-title">Secure Connection</div>
-        <small>Your data is protected</small>
-    </div>
-
-    <div class="feature-box">
-        <div class="feature-icon">🎓</div>
-        <div class="feature-title">Trusted Platform</div>
-        <small>Students • Faculty • Admins</small>
-    </div>
-
-    <div class="feature-box">
-        <div class="feature-icon">🚀</div>
-        <div class="feature-title">Empowering Futures</div>
-        <small>Together we build tomorrow</small>
-    </div>
-
-</div>
-
+                <button type="submit" name="login" class="btn-login">
+                    Sign In
+                </button>
+            </form>
+            
+            <div class="login-footer">
+                <p>&copy; <?php echo date('Y'); ?> MIT-ADT University. All Rights Reserved.</p>
+                <p>Designed and Developed by <span style="font-weight: 600; color: var(--text-main); opacity: 1;">Swaraj Ingale & Wardhan Darekar</span></p>
+            </div>
+        </div>
     </div>
 
 </div>
 
 <script>
+function togglePassword() {
+    const password = document.getElementById("password");
+    const eyeIcon = document.getElementById("eyeIcon");
 
-function togglePassword(){
-
-    let password =
-    document.getElementById("password");
-
-    let eyeIcon =
-    document.getElementById("eyeIcon");
-
-    if(password.type === "password")
-    {
+    if (password.type === "password") {
         password.type = "text";
-
-        eyeIcon.classList.remove("bi-eye-fill");
-        eyeIcon.classList.add("bi-eye-slash-fill");
-    }
-    else
-    {
+        eyeIcon.classList.replace("bi-eye-fill", "bi-eye-slash-fill");
+    } else {
         password.type = "password";
-
-        eyeIcon.classList.remove("bi-eye-slash-fill");
-        eyeIcon.classList.add("bi-eye-fill");
+        eyeIcon.classList.replace("bi-eye-slash-fill", "bi-eye-fill");
     }
 }
-
 </script>
 
 </body>

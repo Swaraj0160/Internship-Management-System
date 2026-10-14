@@ -10,7 +10,83 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'faculty')
     exit();
 }
 
-$id = intval($_GET['id']);
+$faculty_id = (int)$_SESSION['user_id'];
+$id = intval($_GET['id'] ?? 0);
+
+/* -----------------------------------------------------------------
+   AUTHORIZATION CHECK — see faculty/approve.php for full rationale.
+   A faculty member may only act on internships belonging to students
+   in a division that faculty is actually assigned to.
+   ----------------------------------------------------------------- */
+function facultyOwnsInternship(mysqli $conn, int $faculty_id, int $internship_id): bool
+{
+    if($internship_id <= 0)
+    {
+        return false;
+    }
+
+    $faculty_divisions = [];
+
+    $fd_res = mysqli_query(
+        $conn,
+        "SELECT DISTINCT division FROM faculty_divisions
+         WHERE faculty_id='$faculty_id'
+           AND division IS NOT NULL
+           AND TRIM(division) <> ''"
+    );
+
+    if($fd_res)
+    {
+        while($row = mysqli_fetch_assoc($fd_res))
+        {
+            $v = trim((string)$row['division']);
+            if($v !== '')
+            {
+                $faculty_divisions[] = $v;
+            }
+        }
+    }
+
+    if(empty($faculty_divisions))
+    {
+        $fac_res = mysqli_query($conn, "SELECT faculty_division FROM users WHERE id='$faculty_id'");
+        $fac_row = mysqli_fetch_assoc($fac_res);
+        $legacy = trim((string)($fac_row['faculty_division'] ?? ''));
+        if($legacy !== '')
+        {
+            $faculty_divisions[] = $legacy;
+        }
+    }
+
+    if(empty($faculty_divisions))
+    {
+        return false;
+    }
+
+    $div_values = array_map(
+        fn($d) => "'" . mysqli_real_escape_string($conn, $d) . "'",
+        $faculty_divisions
+    );
+    $div_list = implode(',', $div_values);
+
+    $check = mysqli_query(
+        $conn,
+        "SELECT internships.id
+         FROM internships
+         JOIN users ON internships.student_id = users.id
+         WHERE internships.id='$internship_id'
+           AND users.division IN ($div_list)
+         LIMIT 1"
+    );
+
+    return $check && mysqli_num_rows($check) > 0;
+}
+
+if(!facultyOwnsInternship($conn, $faculty_id, $id))
+{
+    http_response_code(403);
+    die("You are not authorized to reject this internship application.");
+}
 
 if(isset($_POST['reject']))
 {

@@ -11,20 +11,20 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin')
 
 if(isset($_POST['add_faculty']))
 {
-    $full_name = $_POST['full_name'];
-    $email = $_POST['email'];
+    $full_name = trim($_POST['full_name']);
+    $email = trim($_POST['email']);
     $password = $_POST['password'];
-    $faculty_division = $_POST['faculty_division'];
+    $faculty_division = trim($_POST['faculty_division']);
 
     $hashed_password = password_hash(
         $password,
         PASSWORD_DEFAULT
     );
 
-    $check = "SELECT * FROM users
-              WHERE email='$email'";
-
-    $check_result = mysqli_query($conn, $check);
+    $check = $conn->prepare("SELECT id FROM users WHERE email=?");
+    $check->bind_param("s", $email);
+    $check->execute();
+    $check_result = $check->get_result();
 
     if(mysqli_num_rows($check_result) > 0)
     {
@@ -32,25 +32,53 @@ if(isset($_POST['add_faculty']))
     }
     else
     {
-        $query = "INSERT INTO users
-        (
-            full_name,
-            email,
-            password,
-            role,
-            faculty_division
-        )
+        $stmt = $conn->prepare(
+            "INSERT INTO users
+            (
+                full_name,
+                email,
+                password,
+                role,
+                faculty_division
+            )
+            VALUES
+            (?, ?, ?, 'faculty', ?)"
+        );
 
-        VALUES
-        (
-            '$full_name',
-            '$email',
-            '$hashed_password',
-            'faculty',
-            '$faculty_division'
-        )";
+        $stmt->bind_param(
+            "ssss",
+            $full_name,
+            $email,
+            $hashed_password,
+            $faculty_division
+        );
 
-        mysqli_query($conn, $query);
+        $stmt->execute();
+
+        /* Best-effort: keep the faculty_divisions mapping table in sync
+           so this faculty immediately shows up correctly on
+           faculty/dashboard.php, which reads faculty_divisions first
+           and only falls back to users.faculty_division for legacy
+           records. This block is defensive: if faculty_divisions has a
+           different column layout than expected (faculty_id, division)
+           on your server, prepare() will simply return false and this
+           is skipped without breaking faculty creation. Verify the
+           table's actual columns in phpMyAdmin; add the mapping row
+           manually there if this silently does not insert. */
+        $new_faculty_id = $stmt->insert_id;
+
+        if($new_faculty_id > 0 && $faculty_division !== "")
+        {
+            $fd_stmt = $conn->prepare(
+                "INSERT INTO faculty_divisions (faculty_id, division) VALUES (?, ?)"
+            );
+
+            if($fd_stmt)
+            {
+                $fd_stmt->bind_param("is", $new_faculty_id, $faculty_division);
+                $fd_stmt->execute();
+            }
+        }
 
         echo "<script>alert('Faculty Added Successfully');</script>";
     }
@@ -138,6 +166,9 @@ body{
                     required>
 
                 <option value="">Select Division</option>
+
+                <option>IT-SMAD</option>
+                <option>IT-DA</option>
 
                 <option>SY-1</option>
                 <option>SY-2</option>

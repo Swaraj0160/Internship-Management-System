@@ -9,270 +9,136 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'faculty')
     exit();
 }
 
-$faculty_id = $_SESSION['user_id'];
-
-$faculty_query = "
-SELECT
-faculty_division,
-full_name
-FROM users
-WHERE id='$faculty_id'
-";
-
-$faculty_result = mysqli_query($conn,$faculty_query);
-$faculty = mysqli_fetch_assoc($faculty_result);
-
-$faculty_division = $faculty['faculty_division'];
-$faculty_name = $faculty['full_name'];
-
-$query = "
-
-SELECT
-
-users.enrollment_no,
-users.roll_no,
-users.full_name,
-
-student_evaluation.week1_marks,
-student_evaluation.week2_marks,
-student_evaluation.week3_marks,
-student_evaluation.week4_marks,
-student_evaluation.weekly_total,
-student_evaluation.mentor_evaluation,
-student_evaluation.final_evaluation,
-student_evaluation.total_marks
-
-FROM users
-
-LEFT JOIN student_evaluation
-
-ON users.id = student_evaluation.student_id
-
-WHERE
-users.role='student'
-AND users.division='$faculty_division'
-
-ORDER BY CAST(users.roll_no AS UNSIGNED)
-
-";
-
-$result = mysqli_query($conn,$query);
-
-header("Content-Type: application/vnd.ms-excel");
-header("Content-Disposition: attachment; filename=Student_Evaluation_".$faculty_division.".xls");
-header("Pragma: no-cache");
-header("Expires: 0");
-
-?>
-
-<html>
-
-<head>
-
-<meta charset="UTF-8">
-
-<style>
-
-table{
-
-border-collapse:collapse;
-width:100%;
-
-}
-
-th,td{
-
-border:1px solid black;
-padding:6px;
-font-size:12px;
-text-align:center;
-
-}
-
-th{
-
-background:#d9d9d9;
-font-weight:bold;
-
-}
-
-.title{
-
-font-size:18px;
-font-weight:bold;
-text-align:center;
-
-}
-
-.subtitle{
-
-font-size:14px;
-text-align:center;
-
-}
-
-.left{
-
-text-align:left;
-
-}
-
-</style>
-
-</head>
-
-<body>
-
-<table>
-
-<tr>
-
-<td colspan="11" class="title">
-
-MIT Art, Design and Technology University
-
-</td>
-
-</tr>
-
-<tr>
-
-<td colspan="11" class="subtitle">
-
-Student Internship Evaluation Sheet
-
-</td>
-
-</tr>
-
-<tr>
-
-<td colspan="6" class="left">
-
-<b>Division :</b>
-<?php echo $faculty_division; ?>
-
-</td>
-
-<td colspan="5" class="left">
-
-<b>Internship Class Coordinator :</b>
-<?php echo $faculty_name; ?>
-
-</td>
-
-</tr>
-
-<tr><td colspan="11"></td></tr>
-
-<tr>
-
-<th>Enrollment No</th>
-
-<th>Roll No</th>
-
-<th>Student Name</th>
-
-<th>Week-1</th>
-
-<th>Week-2</th>
-
-<th>Week-3</th>
-
-<th>Week-4</th>
-
-<th>Week Total (40)</th>
-
-<th>Mentor Evaluation (40)</th>
-
-<th>Final Evaluation (20)</th>
-
-<th>Total Marks (50)</th>
-
-</tr>
-
-<?php
-
-while($row = mysqli_fetch_assoc($result))
+/* -----------------------------------------------------------------
+   Two fixes in this file, same root causes as admin/export_student_
+   evaluations.php:
+
+   1. "Oct-50"/"May-50"/"Dec-50": the old file wrote the Total column
+      as a literal string "X / 50", which Excel's HTML-to-XLS importer
+      auto-detects as a date (N/N -> month/year). This file now
+      produces a REAL .xlsx via lib/ExcelExporter.php, with Total as a
+      genuine numeric cell — the "/50" context moves to the column
+      header only, matching your requirement.
+
+   2. DUAL-DIVISION FACULTY: the old file read only the legacy single
+      value users.faculty_division, so a faculty member assigned to
+      BOTH IT-DA and IT-SMAD (via the faculty_divisions mapping table)
+      would only ever get ONE of their two divisions in this export —
+      the other's students would be silently missing. This now uses
+      the same multi-division lookup already correct in
+      faculty/dashboard.php: read every division from faculty_divisions
+      for this faculty_id, falling back to the legacy column only if
+      that mapping table has no rows for them.
+
+   ORDERING: IT-DA sorts before IT-SMAD, which sorts before any other
+   division this faculty is assigned to; numeric roll number within
+   each division. The academic marking scheme (stored total_marks) is
+   unchanged — this file only changes how it's displayed/exported.
+
+   FIX (post-implementation audit, Section J / data consistency): this
+   file previously ran its OWN separate SQL query and its OWN local
+   copy of the mark-formatting function (formatMarksValueFaculty),
+   and read the Total column straight from the stored total_marks
+   column instead of recomputing it the same way the Admin export and
+   the PDF export do. That meant this file could silently drift out
+   of sync with the other two exports (e.g. if total_marks was ever
+   stale). It now uses the exact same lib/EvaluationDataProvider.php
+   as the Admin Excel export and both PDF exports, so all four exports
+   are guaranteed to use identical data, ordering, and the same
+   malformed-value detection (Section J).
+   ----------------------------------------------------------------- */
+
+require_once __DIR__ . '/../lib/ExcelExporter.php';
+require_once __DIR__ . '/../lib/EvaluationDataProvider.php';
+
+$faculty_id = (int)$_SESSION['user_id'];
+
+$faculty_query = $conn->prepare("SELECT full_name FROM users WHERE id=?");
+$faculty_query->bind_param("i", $faculty_id);
+$faculty_query->execute();
+$faculty_row = $faculty_query->get_result()->fetch_assoc();
+$faculty_name = $faculty_row['full_name'] ?? '';
+
+$faculty_divisions = [];
+
+$fd_res = mysqli_query(
+    $conn,
+    "SELECT DISTINCT division FROM faculty_divisions
+     WHERE faculty_id='$faculty_id'
+       AND division IS NOT NULL
+       AND TRIM(division) <> ''"
+);
+
+if($fd_res)
 {
-
-$week1 = ($row['week1_marks'] != "") ? $row['week1_marks'] : 0;
-$week2 = ($row['week2_marks'] != "") ? $row['week2_marks'] : 0;
-$week3 = ($row['week3_marks'] != "") ? $row['week3_marks'] : 0;
-$week4 = ($row['week4_marks'] != "") ? $row['week4_marks'] : 0;
-
-$weekly = ($row['weekly_total'] != "") ? $row['weekly_total'] : 0;
-
-$mentor = ($row['mentor_evaluation'] != "") ? $row['mentor_evaluation'] : 0;
-
-$final = ($row['final_evaluation'] != "") ? $row['final_evaluation'] : 0;
-
-$total = ($row['total_marks'] != "") ? $row['total_marks'] : 0;
-
-echo "<tr>";
-
-echo "<td>".$row['enrollment_no']."</td>";
-
-echo "<td>".$row['roll_no']."</td>";
-
-echo "<td style='text-align:left;'>".$row['full_name']."</td>";
-
-echo "<td>".$week1."</td>";
-
-echo "<td>".$week2."</td>";
-
-echo "<td>".$week3."</td>";
-
-echo "<td>".$week4."</td>";
-
-echo "<td>".$weekly."</td>";
-
-echo "<td>".$mentor."</td>";
-
-echo "<td>".$final."</td>";
-
-echo "<td>".$total." / 50</td>";
-
-echo "</tr>";
-
+    while($row = mysqli_fetch_assoc($fd_res))
+    {
+        $v = trim((string)$row['division']);
+        if($v !== '')
+        {
+            $faculty_divisions[] = $v;
+        }
+    }
 }
 
-?>
+if(empty($faculty_divisions))
+{
+    $fac_res = mysqli_query($conn, "SELECT faculty_division FROM users WHERE id='$faculty_id'");
+    $fac_row = mysqli_fetch_assoc($fac_res);
+    $legacy = trim((string)($fac_row['faculty_division'] ?? ''));
+    if($legacy !== '')
+    {
+        $faculty_divisions[] = $legacy;
+    }
+}
 
-</table>
+if(empty($faculty_divisions))
+{
+    die("No division is assigned to your faculty account. Contact admin.");
+}
 
-<br><br>
+$evalData = EvaluationDataProvider::getRows($conn, $faculty_divisions);
+$rows = $evalData['rows'];
+$warnings = $evalData['warnings']; // Section J: malformed marks values, reported not hidden
 
-<table>
+$headers = [
+    "Division", "Enrollment No", "Roll No", "Student Name",
+    "Week-1", "Week-2", "Week-3", "Week-4",
+    "Week Total (Max 40)", "Mentor Evaluation (Max 40)", "Final Evaluation (Max 20)",
+    "Total (Max 50)"
+];
 
-<tr>
+$columnMap = [
+    "Division"                      => "division",
+    "Enrollment No"                 => "enrollment_no",
+    "Roll No"                       => "roll_no",
+    "Student Name"                  => "full_name",
+    "Week-1"                        => "week1",
+    "Week-2"                        => "week2",
+    "Week-3"                        => "week3",
+    "Week-4"                        => "week4",
+    "Week Total (Max 40)"           => "weekly_total",
+    "Mentor Evaluation (Max 40)"    => "mentor",
+    "Final Evaluation (Max 20)"     => "final",
+    "Total (Max 50)"                => "total",
+];
 
-<td style="border:none;font-weight:bold;">
-Generated On :
-<?php echo date("d-m-Y h:i A"); ?>
-</td>
+$filterSummary = "Division: " . implode(", ", $faculty_divisions) .
+    "   |   Internship Class Coordinator: " . $faculty_name .
+    "   |   Total Students: " . count($rows);
 
-</tr>
-
-<tr>
-
-<td style="border:none;font-weight:bold;">
-Generated By :
-<?php echo $faculty_name; ?>
-</td>
-
-</tr>
-
-<tr>
-
-<td style="border:none;">
-MIT Art, Design and Technology University
-</td>
-
-</tr>
-
-</table>
-
-</body>
-
-</html>
+try {
+    ExcelExporter::streamStudentReport(
+        "MIT Art, Design and Technology University — Student Internship Evaluation Sheet",
+        $filterSummary,
+        $headers,
+        $rows,
+        $columnMap,
+        "Student_Evaluation_" . implode("_", $faculty_divisions),
+        "Evaluations",
+        $warnings
+    );
+} catch (ExcelExporterException $e) {
+    ExcelExporter::renderSetupError($e->getMessage());
+    exit();
+}

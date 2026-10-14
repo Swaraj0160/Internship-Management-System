@@ -9,7 +9,21 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin')
     exit();
 }
 
-/* CREATE FOLDER IF NOT EXISTS */
+/* -----------------------------------------------------------------
+   REPLACE — sidebar propagation + security fixes found while wiring
+   this page into the shared sidebar:
+
+   1. SQL injection: INSERT used raw $_POST['target_role'] string-
+      concatenated into the query; DELETE used raw $_GET['delete']
+      concatenated into both the SELECT (attachment lookup) and the
+      DELETE itself. All three converted to prepared statements.
+   2. XSS: title, message (via nl2br), and the attachment filename
+      (used both as link text/href) were echoed with no escaping.
+      All now go through htmlspecialchars(). The uploaded attachment
+      filename is also re-sanitized on upload (previously only
+      time()+basename(), which still allowed most special characters
+      through into the stored filename/DB value).
+   ----------------------------------------------------------------- */
 
 if(!file_exists("../uploads/notifications"))
 {
@@ -20,28 +34,20 @@ if(!file_exists("../uploads/notifications"))
 
 if(isset($_POST['add_notification']))
 {
-    $title = mysqli_real_escape_string(
-        $conn,
-        $_POST['title']
-    );
+    $title = trim((string)($_POST['title'] ?? ''));
+    $message = trim((string)($_POST['message'] ?? ''));
 
-    $message = mysqli_real_escape_string(
-        $conn,
-        $_POST['message']
-    );
-
-    $target_role = $_POST['target_role'];
+    $allowed_roles = ['all', 'student', 'faculty'];
+    $target_role = in_array($_POST['target_role'] ?? '', $allowed_roles, true) ? $_POST['target_role'] : 'all';
 
     /* FILE UPLOAD */
 
     $attachment = "";
 
-    if(isset($_FILES['attachment']) &&
-       $_FILES['attachment']['name'] != "")
+    if(isset($_FILES['attachment']) && $_FILES['attachment']['name'] != "")
     {
-        $attachment =
-            time() . "_" .
-            basename($_FILES['attachment']['name']);
+        $safe_name = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', basename($_FILES['attachment']['name']));
+        $attachment = time() . "_" . $safe_name;
 
         $temp_name = $_FILES['attachment']['tmp_name'];
 
@@ -51,26 +57,12 @@ if(isset($_POST['add_notification']))
         );
     }
 
-    /* INSERT */
-
-    mysqli_query(
-        $conn,
-        "INSERT INTO admin_notifications
-        (
-            title,
-            message,
-            target_role,
-            attachment
-        )
-
-        VALUES
-        (
-            '$title',
-            '$message',
-            '$target_role',
-            '$attachment'
-        )"
+    $stmt = $conn->prepare(
+        "INSERT INTO admin_notifications (title, message, target_role, attachment)
+         VALUES (?, ?, ?, ?)"
     );
+    $stmt->bind_param("ssss", $title, $message, $target_role, $attachment);
+    $stmt->execute();
 
     echo "<script>alert('Notification Added Successfully');</script>";
 }
@@ -79,24 +71,18 @@ if(isset($_POST['add_notification']))
 
 if(isset($_GET['delete']))
 {
-    $id = $_GET['delete'];
+    $id = (int)$_GET['delete'];
 
     /* DELETE FILE */
 
-    $get_file = mysqli_query(
-        $conn,
-        "SELECT attachment
-         FROM admin_notifications
-         WHERE id='$id'"
-    );
+    $stmt = $conn->prepare("SELECT attachment FROM admin_notifications WHERE id=?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $file_data = $stmt->get_result()->fetch_assoc();
 
-    $file_data = mysqli_fetch_assoc($get_file);
-
-    if($file_data['attachment'] != "")
+    if($file_data && $file_data['attachment'] != "")
     {
-        $file_path =
-            "../uploads/notifications/" .
-            $file_data['attachment'];
+        $file_path = "../uploads/notifications/" . $file_data['attachment'];
 
         if(file_exists($file_path))
         {
@@ -106,15 +92,14 @@ if(isset($_GET['delete']))
 
     /* DELETE RECORD */
 
-    mysqli_query(
-        $conn,
-        "DELETE FROM admin_notifications
-         WHERE id='$id'"
-    );
+    $stmt = $conn->prepare("DELETE FROM admin_notifications WHERE id=?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
 
     echo "<script>
             window.location='manage_notifications.php';
           </script>";
+    exit();
 }
 
 /* FETCH NOTIFICATIONS */
@@ -126,6 +111,8 @@ $notifications = mysqli_query(
      ORDER BY id DESC"
 );
 
+$activePage = 'manage_notifications.php';
+
 ?>
 
 <!DOCTYPE html>
@@ -136,18 +123,22 @@ $notifications = mysqli_query(
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
-<link rel="stylesheet"
-href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 
 <style>
 
 body{
     background:#f1f5f9;
     font-family:Arial;
+    margin:0;
+}
+
+.page-inner{
+    padding:0 24px 40px;
 }
 
 .container-box{
-    width:95%;
+    width:100%;
     margin:auto;
     margin-top:40px;
     background:white;
@@ -206,17 +197,14 @@ label{
 
 <body>
 
+<?php include __DIR__ . '/includes/sidebar_nav.php'; ?>
+
+<div class="page-inner">
 <div class="container-box">
-    
-          <div class="d-flex justify-content-between align-items-center mb-4">
+
+<div class="d-flex justify-content-between align-items-center mb-4">
 
 <div>
-
-<a href="dashboard.php"
-class="btn btn-primary mb-3"
-style="border-radius:10px;">
-← Back
-</a>
 
 <h2 class="fw-bold mb-1">
 Manage Notifications
@@ -230,11 +218,6 @@ Create and manage announcements for students and faculty.
 
 </div>
 
-<?php
-
-
-?>
-
 
     <!-- ADD FORM -->
 
@@ -245,7 +228,7 @@ style="border-radius:18px;">
 
 <form method="POST"
 enctype="multipart/form-data">
-    
+
         <div class="row">
 
             <div class="col-md-4 mb-3">
@@ -342,7 +325,7 @@ Existing Notifications
         <table class="table table-hover align-middle">
 
             <thead style="background:#1f2937;color:white;">
-                
+
                 <tr>
 
                     <th>Title</th>
@@ -369,11 +352,11 @@ Existing Notifications
                 <tr>
 
                     <td>
-                        <?php echo $row['title']; ?>
+                        <?php echo htmlspecialchars($row['title'], ENT_QUOTES, 'UTF-8'); ?>
                     </td>
 
                     <td>
-                        <?php echo nl2br($row['message']); ?>
+                        <?php echo nl2br(htmlspecialchars($row['message'], ENT_QUOTES, 'UTF-8')); ?>
                     </td>
 
                     <td>
@@ -409,9 +392,10 @@ Existing Notifications
 
                         if($row['attachment'] != "")
                         {
+                            $safe_attachment = htmlspecialchars($row['attachment'], ENT_QUOTES, 'UTF-8');
                         ?>
 
-                        <a href="../uploads/notifications/<?php echo $row['attachment']; ?>"
+                        <a href="../uploads/notifications/<?php echo $safe_attachment; ?>"
                            target="_blank"
                            class="btn btn-sm btn-outline-primary">
 
@@ -436,9 +420,9 @@ Existing Notifications
 
                         <?php
 
-                        echo date(
-                            "d M Y h:i A",
-                            strtotime($row['created_at'])
+                        echo htmlspecialchars(
+                            date("d M Y h:i A", strtotime($row['created_at'])),
+                            ENT_QUOTES, 'UTF-8'
                         );
 
                         ?>
@@ -447,7 +431,7 @@ Existing Notifications
 
                     <td>
 
-                        <a href="manage_notifications.php?delete=<?php echo $row['id']; ?>"
+                        <a href="manage_notifications.php?delete=<?php echo (int)$row['id']; ?>"
                            class="btn btn-sm btn-outline-danger"
                            onclick="return confirm('Delete Notification?')">
 
@@ -491,6 +475,12 @@ Existing Notifications
     </div>
 
 </div>
+</div>
+
+</main>
+</div>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 </html>

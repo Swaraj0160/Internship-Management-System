@@ -7,11 +7,30 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] != 'faculty') {
     exit();
 }
 
-$faculty_id = $_SESSION['user_id'];
+/* -----------------------------------------------------------------
+   REPLACE — sidebar propagation (Phase 2) + one real bug fixed while
+   touching this file:
 
-$query = "SELECT * FROM users WHERE id='$faculty_id'";
-$result = mysqli_query($conn, $query);
-$user = mysqli_fetch_assoc($result);
+   The old code had a duplicated update block. When the new password
+   was SHORTER than 6 characters, the "too short" alert was echoed,
+   but execution then fell through (no exit/return) into a SECOND,
+   unconditional copy of the same hash+UPDATE code further down —
+   so the password was updated anyway, silently bypassing the
+   minimum-length check it had just displayed. Rewritten as a single
+   clean if/elseif chain with an explicit exit() on every branch.
+
+   Also switched the SELECT/UPDATE to prepared statements for
+   consistency with the rest of the project.
+   ----------------------------------------------------------------- */
+
+$faculty_id = (int) $_SESSION['user_id'];
+
+$stmt = $conn->prepare("SELECT * FROM users WHERE id=?");
+$stmt->bind_param("i", $faculty_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+
+$activePage = 'change_password.php';
 
 if (isset($_POST['change_password'])) {
 
@@ -43,37 +62,18 @@ if (isset($_POST['change_password'])) {
 
         echo "<script>alert('New Password cannot be the same as the Old Password');</script>";
 
+    } elseif (strlen($new_password) < 6) {
+
+        echo "<script>alert('Password must be at least 6 characters long.');</script>";
+
     } else {
-        if(strlen($new_password) < 6)
-{
-    echo "<script>alert('Password must be at least 6 characters long.');</script>";
-}
-else
-{
-    $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
 
-    $update = "UPDATE users
-               SET password='$hashed_password'
-               WHERE id='$faculty_id'";
-
-    if(mysqli_query($conn, $update))
-    {
-        echo "<script>alert('Password Changed Successfully');</script>";
-        echo "<script>window.location.href='change_password.php';</script>";
-        exit();
-    }
-    else
-    {
-        echo "<script>alert('Failed to Change Password');</script>";
-    }
-}
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
 
-        $update = "UPDATE users
-                   SET password='$hashed_password'
-                   WHERE id='$faculty_id'";
+        $update_stmt = $conn->prepare("UPDATE users SET password=? WHERE id=?");
+        $update_stmt->bind_param("si", $hashed_password, $faculty_id);
 
-        if (mysqli_query($conn, $update)) {
+        if ($update_stmt->execute()) {
 
             echo "<script>alert('Password Changed Successfully');</script>";
             echo "<script>window.location.href='change_password.php';</script>";
@@ -104,6 +104,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 
 <style>
     :root{
@@ -129,30 +130,10 @@ body{
     background:var(--bg);
     font-family:'Inter',sans-serif;
     min-height:100vh;
-    padding:18px 40px;
 }
 
-/* Back Button */
-
-.page-header{
-    width:100%;
-    margin-bottom:15px;
-}
-
-.back-link{
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    color:var(--purple);
-    text-decoration:none;
-    font-weight:600;
-    font-size:15px;
-    transition:.3s;
-}
-
-.back-link:hover{
-    color:var(--purple-dark);
-    text-decoration:underline;
+.page-inner{
+    padding:18px 40px 40px;
 }
 
 /* Card */
@@ -332,11 +313,9 @@ body{
 
 <body>
 
-<div class="page-header">
-    <a href="dashboard.php" class="back-link">
-        <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
-    </a>
-</div>
+<?php include __DIR__ . '/includes/sidebar_nav.php'; ?>
+
+<div class="page-inner">
 
 <div class="password-card">
     <div class="card-icon">
@@ -404,6 +383,10 @@ body{
         <i class="fa-solid fa-shield-halved"></i>
         <div>For your security, choose a password you don't use elsewhere and avoid sharing it with anyone.</div>
     </div>
+</div>
+
+</div>
+</main>
 </div>
 
 <script>
@@ -483,6 +466,8 @@ function checkMatch(){
     }
 }
 </script>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 

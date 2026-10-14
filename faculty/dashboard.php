@@ -1,774 +1,471 @@
 <?php
 
 session_start();
-
 include("../config.php");
 
-
-
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'faculty') {
-
     header("Location: ../login.php");
-
     exit();
-
 }
-
-
 
 function h($value): string
-
 {
-
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
-
 }
-
-
 
 function shortText(?string $text, int $limit = 150): string
-
 {
-
     $text = trim((string)$text);
-
     if ($text === '') {
-
         return '';
-
     }
-
-
 
     if (function_exists('mb_strimwidth')) {
-
         return mb_strimwidth($text, 0, $limit, '...');
-
     }
-
-
 
     return strlen($text) > $limit ? substr($text, 0, $limit) . '...' : $text;
-
 }
 
-
-
-function runQuery(mysqli $conn, string $sql): ?mysqli_result
-
+/* -----------------------------------------------------------------
+   ATTACHMENT ICON HELPER
+   Maps a filename's extension to a Font Awesome icon, label and
+   accent color, used by the notification "Read More" modal below.
+   ----------------------------------------------------------------- */
+function getAttachmentIcon(?string $filename): array
 {
-
-    $result = mysqli_query($conn, $sql);
-
-    return ($result instanceof mysqli_result) ? $result : null;
-
-}
-
-
-
-function fetchOneAssoc(mysqli $conn, string $sql): array
-
-{
-
-    $result = runQuery($conn, $sql);
-
-    if (!$result) {
-
-        return [];
-
+    $filename = trim((string)$filename);
+    if ($filename === '') {
+        return ['icon' => 'fa-file', 'label' => 'File', 'color' => '#64748b'];
     }
 
-    $row = mysqli_fetch_assoc($result);
+    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-    mysqli_free_result($result);
+    $map = [
+        'pdf'  => ['icon' => 'fa-file-pdf',        'label' => 'PDF Document',      'color' => '#ef4444'],
+        'doc'  => ['icon' => 'fa-file-word',       'label' => 'Word Document',     'color' => '#3B82F6'],
+        'docx' => ['icon' => 'fa-file-word',       'label' => 'Word Document',     'color' => '#3B82F6'],
+        'xls'  => ['icon' => 'fa-file-excel',      'label' => 'Excel Spreadsheet', 'color' => '#22C55E'],
+        'xlsx' => ['icon' => 'fa-file-excel',      'label' => 'Excel Spreadsheet', 'color' => '#22C55E'],
+        'csv'  => ['icon' => 'fa-file-csv',        'label' => 'CSV File',          'color' => '#22C55E'],
+        'ppt'  => ['icon' => 'fa-file-powerpoint', 'label' => 'PowerPoint File',   'color' => '#F59E0B'],
+        'pptx' => ['icon' => 'fa-file-powerpoint', 'label' => 'PowerPoint File',   'color' => '#F59E0B'],
+        'jpg'  => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
+        'jpeg' => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
+        'png'  => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
+        'gif'  => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
+        'webp' => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
+        'zip'  => ['icon' => 'fa-file-zipper',     'label' => 'ZIP Archive',       'color' => '#F59E0B'],
+        'rar'  => ['icon' => 'fa-file-zipper',     'label' => 'RAR Archive',       'color' => '#F59E0B'],
+        '7z'   => ['icon' => 'fa-file-zipper',     'label' => 'Archive',           'color' => '#F59E0B'],
+        'txt'  => ['icon' => 'fa-file-lines',      'label' => 'Text File',         'color' => '#64748b'],
+    ];
 
-    return $row ?: [];
-
+    return $map[$ext] ?? ['icon' => 'fa-file', 'label' => strtoupper($ext ?: 'FILE') . ' File', 'color' => '#64748b'];
 }
 
+function runQuery(mysqli $conn, string $sql): ?mysqli_result
+{
+    $result = mysqli_query($conn, $sql);
+    return ($result instanceof mysqli_result) ? $result : null;
+}
 
+function fetchOneAssoc(mysqli $conn, string $sql): array
+{
+    $result = runQuery($conn, $sql);
+    if (!$result) {
+        return [];
+    }
+    $row = mysqli_fetch_assoc($result);
+    mysqli_free_result($result);
+    return $row ?: [];
+}
 
 $faculty_id = (int)$_SESSION['user_id'];
 
-
-
 $faculty = fetchOneAssoc(
-
     $conn,
-
     "SELECT *
-
      FROM users
-
      WHERE id='$faculty_id'
-
      LIMIT 1"
-
 );
-
-
 
 if (!$faculty) {
-
     header("Location: ../login.php");
-
     exit();
-
 }
 
+/* FACULTY DIVISIONS
+   A faculty member can be assigned to multiple divisions through
+   faculty_divisions. Use that mapping everywhere on this dashboard.
+   Keep the users.faculty_division value as a fallback for older records.
+*/
+$faculty_divisions = [];
+$faculty_divisions_query = runQuery(
+    $conn,
+    "SELECT DISTINCT division
+     FROM faculty_divisions
+     WHERE faculty_id='$faculty_id'
+       AND division IS NOT NULL
+       AND TRIM(division) <> ''
+     ORDER BY division"
+);
 
+if ($faculty_divisions_query) {
+    while ($division_row = mysqli_fetch_assoc($faculty_divisions_query)) {
+        $division_value = trim((string)($division_row['division'] ?? ''));
+        if ($division_value !== '') {
+            $faculty_divisions[] = $division_value;
+        }
+    }
+    mysqli_free_result($faculty_divisions_query);
+}
 
-$faculty_division = trim((string)($faculty['faculty_division'] ?? ''));
+$legacy_division = trim((string)($faculty['faculty_division'] ?? ''));
+if (empty($faculty_divisions) && $legacy_division !== '') {
+    $faculty_divisions[] = $legacy_division;
+}
 
-$division_esc = mysqli_real_escape_string($conn, $faculty_division);
+$faculty_divisions = array_values(array_unique($faculty_divisions));
 
+/* Safe SQL IN-list, e.g. 'IT-DA','IT-SMAD' */
+$division_sql_values = array_map(
+    static fn($division) => "'" . mysqli_real_escape_string($conn, $division) . "'",
+    $faculty_divisions
+);
+$division_list_sql = implode(',', $division_sql_values);
 
+/* Display value used by the UI. */
+$faculty_division = implode(', ', $faculty_divisions);
+
+/* If no division mapping exists, force all division queries to return no rows. */
+$division_condition = !empty($division_list_sql)
+    ? "u.division IN ($division_list_sql)"
+    : "1=0";
 
 $faculty_name = trim((string)($faculty['full_name'] ?? ''));
-
 $faculty_name_clean = preg_replace('/^(Prof\.?|Dr\.?|Professor)\s*/i', '', $faculty_name);
-
 $faculty_initial = strtoupper(substr($faculty_name_clean ?: $faculty_name ?: 'F', 0, 1));
 
-
-
 $latest_from = "
-
     FROM users u
-
     LEFT JOIN internships i
-
         ON i.id = (
-
             SELECT id
-
             FROM internships
-
             WHERE student_id = u.id
-
             ORDER BY created_at DESC, id DESC
-
             LIMIT 1
-
         )
-
 ";
-
-
 
 $division_where = "
-
     WHERE u.role='student'
-
-      AND u.division='$division_esc'
-
+      AND $division_condition
 ";
 
-
-
 /* TOTAL STUDENTS */
-
 $total_students = 0;
-
 $student_query = runQuery(
-
     $conn,
-
     "SELECT COUNT(*) AS total
-
      FROM users
-
      WHERE role='student'
-
-       AND division='$division_esc'"
-
+       AND division IN ($division_list_sql)"
 );
-
 if ($student_query) {
-
     $total_students = (int)(mysqli_fetch_assoc($student_query)['total'] ?? 0);
-
     mysqli_free_result($student_query);
-
 }
-
-
 
 /* LATEST INTERNSHIP FOR EACH STUDENT IN THIS DIVISION */
-
 $current_query = runQuery(
-
     $conn,
-
     "SELECT
-
         u.id,
-
         u.roll_no,
-
         u.full_name,
-
         u.division,
-
         i.status,
-
         i.internship_type,
-
         i.company_name,
-
         i.mentor_name,
-
         i.company_contact
-
      $latest_from
-
      $division_where
-
      ORDER BY CAST(u.roll_no AS UNSIGNED), u.full_name ASC"
-
 );
-
-
 
 $total_applications = 0;
-
 $approved_count = 0;
-
 $pending_count = 0;
-
 $rejected_count = 0;
-
 $not_submitted_count = 0;
 
-
-
 if ($current_query) {
-
     while ($row = mysqli_fetch_assoc($current_query)) {
-
         if (!empty($row['status'])) {
-
             $total_applications++;
-
         } else {
-
             $not_submitted_count++;
-
         }
-
-
 
         if (($row['status'] ?? '') === 'Approved') {
-
             $approved_count++;
-
         } elseif (($row['status'] ?? '') === 'Pending') {
-
             $pending_count++;
-
         } elseif (($row['status'] ?? '') === 'Rejected') {
-
             $rejected_count++;
-
         }
-
     }
-
     mysqli_free_result($current_query);
-
 }
-
-
 
 /* TOTAL COMPANIES */
-
 $total_companies = 0;
-
 $company_count_query = runQuery(
-
     $conn,
-
     "SELECT COUNT(DISTINCT i.company_name) AS total
-
      $latest_from
-
      $division_where
-
        AND i.company_name IS NOT NULL
-
        AND i.company_name <> ''"
-
 );
-
 if ($company_count_query) {
-
     $total_companies = (int)(mysqli_fetch_assoc($company_count_query)['total'] ?? 0);
-
     mysqli_free_result($company_count_query);
-
 }
-
-
 
 /* APPROVAL RATE */
-
 $approval_rate = 0.0;
-
 if ($total_students > 0) {
-
     $approval_rate = round(($approved_count / $total_students) * 100, 2);
-
 }
-
-
 
 /* ADMIN NOTIFICATIONS FOR FACULTY */
-
 $admin_notifications = [];
-
 $notif_query = runQuery(
-
     $conn,
-
     "SELECT *
-
      FROM admin_notifications
-
      WHERE target_role='faculty'
-
         OR target_role='all'
-
      ORDER BY id DESC"
-
 );
-
 if ($notif_query) {
-
     while ($row = mysqli_fetch_assoc($notif_query)) {
-
         $admin_notifications[] = $row;
-
     }
-
     mysqli_free_result($notif_query);
-
 }
-
-
 
 /* UNREAD NOTIFICATIONS COUNT */
-
 $notification_count = 0;
-
 $unread_notifications = runQuery(
-
     $conn,
-
     "SELECT id
-
      FROM admin_notifications
-
      WHERE (
-
         target_role='faculty'
-
         OR target_role='all'
-
      )
-
      AND id NOT IN (
-
         SELECT notification_id
-
         FROM faculty_notification_reads
-
         WHERE faculty_id='$faculty_id'
-
      )"
-
 );
-
 if ($unread_notifications) {
-
     $notification_count = mysqli_num_rows($unread_notifications);
-
     mysqli_free_result($unread_notifications);
-
 }
-
-
 
 /* ANALYTICS SEARCH */
-
 $search_results = [];
-
 $search_total = 0;
 
-
-
 if (isset($_GET['analytics_search'])) {
-
     $status_filter = trim($_GET['status'] ?? '');
-
     $type_filter = trim($_GET['internship_type'] ?? '');
-
     $company_filter = trim($_GET['company_name'] ?? '');
 
-
-
-    $where = "u.role='student' AND u.division='$division_esc'";
-
-
+    $where = "u.role='student' AND $division_condition";
 
     if ($status_filter !== '') {
-
         $where .= " AND i.status='" . mysqli_real_escape_string($conn, $status_filter) . "'";
-
     }
-
-
 
     if ($type_filter !== '') {
-
         $where .= " AND i.internship_type='" . mysqli_real_escape_string($conn, $type_filter) . "'";
-
     }
-
-
 
     if ($company_filter !== '') {
-
         $where .= " AND i.company_name='" . mysqli_real_escape_string($conn, $company_filter) . "'";
-
     }
-
-
 
     $analytics_query = runQuery(
-
         $conn,
-
         "SELECT
-
             u.roll_no,
-
             u.full_name,
-
             u.division,
-
             i.status,
-
             i.internship_type,
-
             i.company_name,
-
             i.mentor_name
-
          FROM users u
-
          LEFT JOIN internships i
-
             ON i.id = (
-
                 SELECT MAX(id)
-
                 FROM internships
-
                 WHERE student_id = u.id
-
             )
-
          WHERE $where
-
          ORDER BY CAST(u.roll_no AS UNSIGNED), u.full_name ASC"
-
     );
 
-
-
     if ($analytics_query) {
-
         $search_total = mysqli_num_rows($analytics_query);
-
         while ($row = mysqli_fetch_assoc($analytics_query)) {
-
             $search_results[] = $row;
-
         }
-
         mysqli_free_result($analytics_query);
-
     }
-
 }
-
-
 
 /* TOP COMPANIES */
-
 $company_query = runQuery(
-
     $conn,
-
     "SELECT
-
         i.company_name,
-
         COUNT(*) AS total
-
      FROM internships i
-
      INNER JOIN users u ON i.student_id = u.id
-
-     WHERE u.division='" . mysqli_real_escape_string($conn, $faculty_division) . "'
-
+     WHERE $division_condition
      AND i.company_name IS NOT NULL
-
      AND i.company_name <> ''
-
      GROUP BY i.company_name
-
      ORDER BY total DESC
-
      LIMIT 10"
-
 );
-
-
 
 $company_labels = [];
-
 $company_values = [];
 
-
-
 if ($company_query) {
-
     while ($row = mysqli_fetch_assoc($company_query)) {
-
         $company_labels[] = (strlen($row['company_name']) > 28)
-
             ? substr($row['company_name'], 0, 28) . '...'
-
             : $row['company_name'];
-
         $company_values[] = (int)$row['total'];
-
     }
-
     mysqli_free_result($company_query);
-
 }
-
-
 
 $top_company = fetchOneAssoc(
-
     $conn,
-
     "SELECT
-
         i.company_name,
-
         COUNT(*) AS total
-
      FROM internships i
-
      INNER JOIN users u ON i.student_id = u.id
-
-     WHERE u.division='" . mysqli_real_escape_string($conn, $faculty_division) . "'
-
+     WHERE $division_condition
      AND i.company_name IS NOT NULL
-
      AND i.company_name <> ''
-
      GROUP BY i.company_name
-
      ORDER BY total DESC
-
      LIMIT 1"
-
 );
-
-
 
 $top_company_name = $top_company['company_name'] ?? '-';
-
 $top_company_students = (int)($top_company['total'] ?? 0);
 
-
-
 /* INTERNSHIP TYPES */
-
 $type_query = runQuery(
-
     $conn,
-
     "SELECT
-
         i.internship_type,
-
         COUNT(*) AS total
-
      FROM internships i
-
      INNER JOIN users u ON i.student_id = u.id
-
-     WHERE u.division='" . mysqli_real_escape_string($conn, $faculty_division) . "'
-
+     WHERE $division_condition
      AND i.internship_type IS NOT NULL
-
      AND i.internship_type <> ''
-
      GROUP BY i.internship_type
-
      ORDER BY total DESC"
-
 );
-
-
 
 $type_labels = [];
-
 $type_values = [];
 
-
-
 if ($type_query) {
-
     while ($row = mysqli_fetch_assoc($type_query)) {
-
         $type_labels[] = $row['internship_type'] ?: 'Not Set';
-
         $type_values[] = (int)$row['total'];
-
     }
-
     mysqli_free_result($type_query);
-
 }
-
-
 
 if (empty($type_labels)) {
-
     $type_labels = ['Not Set'];
-
     $type_values = [0];
-
 }
-
-
 
 /* STATUS ARRAY FOR CLEAN PROFESSIONAL UI */
-
 $status_labels = ['Approved', 'Pending', 'Rejected', 'No Internship'];
-
 $status_values = [$approved_count, $pending_count, $rejected_count, $not_submitted_count];
 
-
-
 /* DROPDOWNS */
-
 $company_dropdown = [];
-
 $company_dropdown_q = runQuery(
-
     $conn,
-
     "SELECT DISTINCT i.company_name
-
      FROM internships i
-
      INNER JOIN users u ON i.student_id = u.id
-
-     WHERE u.division='" . mysqli_real_escape_string($conn, $faculty_division) . "'
-
+     WHERE $division_condition
      AND i.company_name IS NOT NULL
-
      AND i.company_name <> ''
-
      ORDER BY i.company_name"
-
 );
-
 if ($company_dropdown_q) {
-
     while ($row = mysqli_fetch_assoc($company_dropdown_q)) {
-
         $company_dropdown[] = $row['company_name'];
-
     }
-
     mysqli_free_result($company_dropdown_q);
-
 }
-
-
 
 $type_dropdown = [];
-
 $type_dropdown_q = runQuery(
-
     $conn,
-
     "SELECT DISTINCT i.internship_type
-
      FROM internships i
-
      INNER JOIN users u ON i.student_id = u.id
-
-     WHERE u.division='" . mysqli_real_escape_string($conn, $faculty_division) . "'
-
+     WHERE $division_condition
      AND i.internship_type IS NOT NULL
-
      AND i.internship_type <> ''
-
      ORDER BY i.internship_type"
-
 );
-
 if ($type_dropdown_q) {
-
     while ($row = mysqli_fetch_assoc($type_dropdown_q)) {
-
         $type_dropdown[] = $row['internship_type'];
-
     }
-
     mysqli_free_result($type_dropdown_q);
-
 }
-
 ?>
-
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Faculty Dashboard</title>
 
-
-
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
-
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-
 
     <style>
 :root{
@@ -820,7 +517,6 @@ body::before{
 }
 img, canvas{
     max-width:100%;
-    
 }
 .top-progress{
     position:fixed;
@@ -829,14 +525,12 @@ img, canvas{
     width:0%;
     z-index:9999;
     background:linear-gradient(90deg, var(--purple), var(--cyan), var(--pink));box-shadow:0 0 18px rgba(0,229,255,.45);
-    
 }
 .fx-bg{
     position:fixed;
     inset:0;pointer-events:none;
     z-index:0;
     overflow:hidden;
-    
 }
 .fx-orb{
     position:absolute;
@@ -845,7 +539,6 @@ img, canvas{
     opacity:.32;
     mix-blend-mode:screen;
     animation:orbFloat 16s ease-in-out infinite;
-    
 }
 .fx-orb.orb1{
     width:360px;
@@ -853,7 +546,6 @@ img, canvas{
     left:-120px;
     top:80px;
     background:radial-gradient(circle at 30% 30%, rgba(123,97,255,.70), rgba(123,97,255,0) 68%);
-    
 }
 .fx-orb.orb2{
     width:280px;
@@ -862,7 +554,6 @@ img, canvas{
     top:140px;
     background:radial-gradient(circle at 30% 30%, rgba(0,229,255,.34), rgba(0,229,255,0) 68%);
     animation-delay:-6s;
-    
 }
 .fx-orb.orb3{
     width:240px;
@@ -871,12 +562,10 @@ img, canvas{
     bottom:90px;
     background:radial-gradient(circle at 30% 30%, rgba(255,79,216,.24), rgba(255,79,216,0) 68%);
     animation-delay:-11s;
-    
 }
 .fx-particles{
     position:absolute;
     inset:0;
-    
 }
 .particle{
     position:absolute;
@@ -885,14 +574,12 @@ img, canvas{
     box-shadow:0 0 28px rgba(255,255,255,.25);
     opacity:.24;animation:particleDrift var(--dur, 18s) linear infinite;
     transform:translate3d(0,0,0);
-    
 }
 .app{
     min-height:100vh;
     display:flex;width:100%;overflow-x:hidden;
     position:relative;
     z-index:1;
-    
 }
 .sidebar{
     width:var(--sidebar-width);
@@ -906,48 +593,41 @@ img, canvas{
     display:flex;flex-direction:column;
     overflow:hidden;
     border-right:1px solid rgba(255,255,255,.06);
-    
 }
 .sidebar::after{content:"";
 position:absolute;
 inset:0;background:linear-gradient(180deg, rgba(255,255,255,.05), transparent 35%, rgba(255,255,255,.03));
 pointer-events:none;
-    
 }
 .brand{
     padding:16px 16px 12px;
     text-align:center;
     border-bottom:1px solid rgba(255,255,255,.08);
-    
 }
-.brand img{ 
+.brand img{
     width:clamp(85px,8vw,120px);
     height:auto;object-fit:contain;
     display:block;margin:0 auto 10px;
-    
 }
 .brand .title{
     font-size:clamp(.88rem,1vw,1.08rem);
     font-weight:800;line-height:1.08;
     letter-spacing:-.03em;
-    
 }
 .brand .subtitle{
     margin-top:7px;
     font-size:.70rem;
     letter-spacing:.34em;
     color:rgba(255,255,255,.58);
-    
 }
 .profile-mini{
     display:flex;
 gap:clamp(8px,.8vw,12px);
-align-items:center;   
+align-items:center;
 padding:clamp(10px,.8vw,12px)
 clamp(12px,1vw,16px);
 border-bottom:1px solid rgba(255,255,255,.08);
 min-width:0;
-    
 }
 .profile-mini .avatar{
     width:44px;height:44px;
@@ -958,11 +638,9 @@ min-width:0;
     color:#fff;
     box-shadow:0 12px 24px rgba(0,0,0,.24), 0 0 0 6px rgba(255,255,255,.05);
     flex:0 0 auto;animation:floatIcon 3.8s ease-in-out infinite;
-    
 }
 .profile-mini .meta{
     min-width:0;
-    
 }
 .profile-mini .meta .name{
     font-size:clamp(.82rem,.9vw,.93rem);
@@ -970,12 +648,10 @@ min-width:0;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
-    
 }
 .profile-mini .meta .small{
     color:rgba(255,255,255,.65);
     font-size:.80rem;
-    
 }
 .nav{
     padding:10px 12px 12px;
@@ -997,7 +673,6 @@ min-width:0;
     letter-spacing:.16em;
     text-transform:uppercase;
     font-weight:700;
-    
 }
 .nav a{
     display:flex;
@@ -1030,18 +705,15 @@ min-width:0;
     position:absolute;
     inset:0;background:linear-gradient(90deg, rgba(255,255,255,.18), transparent 40%, rgba(255,255,255,.10));
     opacity:0;transform:translateX(-35%);transition:opacity .25s ease, transform .35s ease;
-    
 }
 .nav a:hover::before,.nav a.active::before{
     opacity:1;transform:translateX(0);
-    
 }
 .nav a i{width:clamp(16px,1vw,20px);
     min-width:clamp(16px,1vw,20px);
 text-align:center;
 font-size:clamp(.85rem,.9vw,.98rem);
 flex:0 0 auto;transition:transform .25s ease;
-    
 }
 .nav a:hover i,.nav a.active i{transform:rotate(8deg) scale(1.05);}
 .nav a:hover{background:linear-gradient(90deg, #cf1e71, #f26d21);color:#fff;transform:translateX(4px) scale(1.02);box-shadow:0 12px 24px rgba(0,0,0,.20);}
@@ -1886,7 +1558,231 @@ table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-
     }
 }
 
+/* =====================================================================
+   CHART CASCADE — "stacked chart cascade" style entrance, applied
+   identically to both donut panels (Internship Status / Internship
+   Type Analysis). A trio of rings scale outward and fade behind the
+   chart while the chart itself pops in with a bouncy overshoot, and
+   the Chart.js animation.delay (set on statusChart/typeChart in the
+   script below) staggers each wedge on top of that so the slices
+   read as stacking in one after another. Purely CSS-driven via
+   :has(), so it re-plays automatically whenever the panel re-enters
+   the viewport (IntersectionObserver toggles .visible on the same
+   element these rules key off of).
+   ===================================================================== */
+.chart-cascade{
+    position:relative;
+    width:260px;
+    height:220px;
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+.cascade-ring{
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:170px;
+    height:170px;
+    border-radius:50%;
+    border:3px solid rgba(123,97,255,.35);
+    transform:translate(-50%,-50%) scale(.4);
+    opacity:0;
+    pointer-events:none;
+}
+.chart-cascade:has(.status-chart-wrap.visible) .ring-1{
+    animation:cascadeRing 1.05s cubic-bezier(.16,1,.3,1) forwards;
+    animation-delay:0ms;
+}
+.chart-cascade:has(.status-chart-wrap.visible) .ring-2{
+    border-color:rgba(0,229,255,.30);
+    animation:cascadeRing 1.05s cubic-bezier(.16,1,.3,1) forwards;
+    animation-delay:110ms;
+}
+.chart-cascade:has(.status-chart-wrap.visible) .ring-3{
+    border-color:rgba(255,79,216,.28);
+    animation:cascadeRing 1.05s cubic-bezier(.16,1,.3,1) forwards;
+    animation-delay:220ms;
+}
+@keyframes cascadeRing{
+    0%{opacity:0; transform:translate(-50%,-50%) scale(.4);}
+    35%{opacity:.9;}
+    100%{opacity:0; transform:translate(-50%,-50%) scale(1.35);}
+}
+/* Bouncy pop-in for the chart itself — higher specificity than the
+   generic .chart-ready rules above so it wins the cascade, and kept
+   byte-for-byte the same for statusChart's and typeChart's wrapper
+   since both share the .status-chart-wrap.chart-ready selector. */
+.status-chart-wrap.chart-ready{
+    position:relative;
+    z-index:1;
+    opacity:0;
+    transform:scale(.55) rotate(-12deg);
+    transition:opacity .85s cubic-bezier(.34,1.56,.64,1), transform .85s cubic-bezier(.34,1.56,.64,1), filter .85s ease;
+    transition-delay:120ms;
+}
+.status-chart-wrap.chart-ready.visible{
+    opacity:1;
+    transform:scale(1) rotate(0deg);
+}
+@media (prefers-reduced-motion: reduce){
+    .cascade-ring{animation:none !important; opacity:0 !important;}
+    .status-chart-wrap.chart-ready{transition-delay:0ms !important;}
+}
+
+/* =====================================================================
+   NOTIFICATION "READ MORE" MODAL — new styles
+   Keeps the dropdown compact; full text lives here so nothing gets
+   cut off. Matches the light glass card look already used by
+   .notifs-dropdown / .notif-item above.
+   ===================================================================== */
+.read-more-btn{
+    border:1px solid rgba(123,97,255,.25);
+    background:rgba(123,97,255,.08);
+    color:#5b3df5;
+    font-weight:700;
+    font-size:.78rem;
+    padding:6px 12px;
+    border-radius:999px;
+    transition:background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.read-more-btn:hover{
+    background:#5b3df5;
+    color:#fff;
+    transform:translateY(-1px);
+    box-shadow:0 10px 20px rgba(91,61,245,.24);
+}
+.notif-modal-content{
+    border-radius:24px;
+    border:1px solid rgba(123,97,255,.14);
+    background:rgba(255,255,255,.98);
+    box-shadow:0 30px 80px rgba(30,10,80,.28);
+    overflow:hidden;
+}
+.notif-modal-header{
+    padding:18px 22px;
+    border-bottom:1px solid rgba(123,97,255,.10);
+    background:linear-gradient(135deg, #f7f5ff, #eef5ff);
+}
+.notif-modal-header .modal-title{
+    font-weight:800;
+    color:#1f2430;
+    font-size:1.1rem;
+    overflow-wrap:anywhere;
+}
+.notif-modal-body{
+    padding:22px;
+    max-height:65vh;
+    overflow-y:auto;
+    color:#1f2430;
+}
+.notif-modal-time{
+    color:#5c6782;
+    font-size:.88rem;
+    margin-bottom:14px;
+}
+.notif-modal-message{
+    font-size:.98rem;
+    line-height:1.7;
+    color:#26304a;
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+}
+.notif-modal-divider{
+    border:none;
+    border-top:1px solid rgba(123,97,255,.12);
+    margin:20px 0;
+}
+.notif-modal-section-label{
+    font-weight:800;
+    font-size:.86rem;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:#5c6782;
+    margin-bottom:12px;
+}
+.notif-attachment-card{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    padding:14px;
+    border-radius:18px;
+    background:#f7f8fc;
+    border:1px solid rgba(123,97,255,.12);
+    flex-wrap:wrap;
+}
+.notif-attachment-icon{
+    width:52px;
+    height:52px;
+    border-radius:14px;
+    display:grid;
+    place-items:center;
+    background:rgba(123,97,255,.10);
+    font-size:1.4rem;
+    flex:0 0 auto;
+}
+.notif-attachment-info{
+    flex:1 1 160px;
+    min-width:0;
+}
+.notif-attachment-name{
+    font-weight:700;
+    color:#1f2430;
+    overflow-wrap:anywhere;
+}
+.notif-attachment-type{
+    font-size:.82rem;
+    color:#5c6782;
+}
+.notif-attachment-actions{
+    display:flex;
+    gap:8px;
+    flex:0 0 auto;
+}
+.notif-btn-view,
+.notif-btn-download{
+    border-radius:12px;
+    font-weight:700;
+    font-size:.82rem;
+    padding:8px 14px;
+    border:1px solid rgba(123,97,255,.20);
+}
+.notif-btn-view{
+    background:#fff;
+    color:#5b3df5;
+}
+.notif-btn-view:hover{
+    background:rgba(123,97,255,.08);
+    color:#5b3df5;
+}
+.notif-btn-download{
+    background:#5b3df5;
+    color:#fff;
+}
+.notif-btn-download:hover{
+    background:#4a2fe0;
+    color:#fff;
+}
+.notif-modal-footer{
+    padding:14px 22px;
+    border-top:1px solid rgba(123,97,255,.10);
+    background:#fafaff;
+}
+@media (max-width:768px){
+    .notif-modal-body{ padding:16px; max-height:70vh; }
+    .notif-attachment-actions{ width:100%; }
+    .notif-attachment-actions a{ flex:1 1 auto; text-align:center; }
+}
+@media (max-width:480px){
+    .modal-dialog{ margin:10px; }
+    .notif-modal-header{ padding:14px 16px; }
+    .notif-modal-header .modal-title{ font-size:1rem; }
+}
+
 </style>
+
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 
 </head>
 
@@ -1908,77 +1804,18 @@ table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-
 
 
 
-<div class="app">
-
-    <aside class="sidebar">
-
-        <div class="brand">
-
-            <img src="../assets/images/MIT_LOGO.jpg" alt="MIT-ADT University">
-
-            <div class="title">MIT-ADT University</div>
-
-            <div class="subtitle">PUNE, INDIA</div>
-
-        </div>
-
-
-
-        <div class="profile-mini">
-
-            <div class="avatar"><?php echo h($faculty_initial); ?></div>
-
-            <div class="meta">
-
-                <div class="name"><?php echo h($faculty['full_name']); ?></div>
-
-                <div class="small"><?php echo h($faculty_division); ?></div>
-
-            </div>
-
-        </div>
-
-
-
-        <nav class="nav">
-
-            <div class="nav-label">Workspace</div>
-
-            <a href="dashboard.php" class="active"><i class="fa-solid fa-house"></i>Dashboard</a>
-
-            <a href="manage_applications.php"><i class="fa-solid fa-circle-check"></i>Manage Applications</a>
-
-            <a href="view_updates.php"><i class="fa-solid fa-calendar-days"></i>Weekly Reports</a>
-
-            <a href="student_evaluations.php"><i class="fa-solid fa-star"></i>Student Evaluation</a>
-
-            <a href="manage_deadlines.php"><i class="fa-solid fa-clock"></i>Manage Deadlines</a>
-
-            <a href="manage_notifications.php"><i class="fa-solid fa-bell"></i>Notifications</a>
-
-            <a href="view_reports.php"><i class="fa-solid fa-file-lines"></i>Final Reports</a>
-
-            <a href="export_report.php"><i class="fa-solid fa-file-export"></i>Export Division Report</a>
-
-
-
-            <div class="account-bottom">
-
-                <div class="nav-label">Account</div>
-
-                <a href="change_password.php"><i class="fa-solid fa-key"></i>Change Password</a>
-
-                <a href="../logout.php"><i class="fa-solid fa-right-from-bracket"></i>Logout</a>
-
-            </div>
-
-        </nav>
-
-    </aside>
-
-
-
-    <main class="main">
+<?php
+/* REPLACE — sidebar propagation (Phase 2). The inline sidebar this
+   page used to define directly is now the shared
+   faculty/includes/sidebar_nav.php include (same visual output —
+   this page's own $faculty_name/$faculty_initial/$faculty_division
+   variables, already computed above, are reused automatically),
+   plus mobile off-canvas support that did not exist here before,
+   plus two new links (Risk Insights, Export Students) that had no
+   navigation entry point anywhere in the project until now. */
+$activePage = 'dashboard.php';
+include __DIR__ . '/includes/sidebar_nav.php';
+?>
 
         <div class="topbar reveal">
 
@@ -2044,33 +1881,62 @@ table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-
 
                                     <?php foreach ($admin_notifications as $notification): ?>
 
+                                        <?php
+                                            $notif_title      = $notification['title'] ?? 'Notification';
+$notif_message    = trim((string)($notification['message'] ?? ''));
+
+// Preview text
+$notif_preview    = shortText($notif_message, 140);
+
+// Only show Read More if the preview is actually shorter
+$show_read_more   = ($notif_preview !== $notif_message);
+
+$notif_time_raw   = $notification['created_at'] ?? null;
+                                            $notif_time_fmt   = $notif_time_raw ? date("d M Y h:i A", strtotime($notif_time_raw)) : '-';
+                                            $notif_attachment = trim((string)($notification['attachment'] ?? ''));
+                                            $has_attachment   = $notif_attachment !== '';
+                                            $attachment_url   = $has_attachment ? '../uploads/notifications/' . $notif_attachment : '';
+                                            $attachment_meta  = getAttachmentIcon($notif_attachment);
+                                        ?>
+
                                         <div class="notif-item">
 
                                             <div class="d-flex justify-content-between align-items-start gap-2">
 
-                                                <div class="title"><?php echo h($notification['title'] ?? 'Notification'); ?></div>
+                                                <div class="title"><?php echo h($notif_title); ?></div>
 
                                                 <span class="status-badge b-purple">Admin</span>
 
                                             </div>
 
-                                            <div class="msg"><?php echo h(shortText($notification['message'] ?? '', 180)); ?></div>
+                                            <!-- Compact preview only — the full text, untruncated,
+                                                 lives in the shared modal opened by Read More. -->
+                                            <div class="msg"><?php echo h($notif_preview); ?></div>
 
-                                            <?php if (!empty($notification['attachment'])): ?>
+                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
 
-                                                <div class="mt-2">
+                                                <div class="time mb-0"><?php echo h($notif_time_fmt); ?></div>
 
-                                                    <a href="../uploads/notifications/<?php echo h($notification['attachment']); ?>" target="_blank" class="btn btn-sm btn-primary">
+                                                <?php if ($show_read_more): ?>
+<button
+    type="button"
+    class="read-more-btn"
+    data-bs-toggle="modal"
+    data-bs-target="#notificationModal"
+    data-notif-title="<?php echo h($notif_title); ?>"
+    data-notif-message="<?php echo h($notif_message); ?>"
+    data-notif-time="<?php echo h($notif_time_fmt); ?>"
+    data-notif-has-attachment="<?php echo $has_attachment ? '1' : '0'; ?>"
+    data-notif-attachment-url="<?php echo h($attachment_url); ?>"
+    data-notif-attachment-name="<?php echo h($notif_attachment); ?>"
+    data-notif-attachment-icon="<?php echo h($attachment_meta['icon']); ?>"
+    data-notif-attachment-label="<?php echo h($attachment_meta['label']); ?>"
+    data-notif-attachment-color="<?php echo h($attachment_meta['color']); ?>">
+    Read More
+</button>
+<?php endif; ?>
 
-                                                        <i class="fa fa-download me-1"></i>Download Attachment
-
-                                                    </a>
-
-                                                </div>
-
-                                            <?php endif; ?>
-
-                                            <div class="time"><?php echo h(date("d M Y h:i A", strtotime($notification['created_at']))); ?></div>
+                                            </div>
 
                                         </div>
 
@@ -2318,10 +2184,15 @@ table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-
 
                             <div class="status-visual">
 
-                                <div class="status-chart-wrap chart-ready chart-focus" data-chart-wrap>
+                                <div class="chart-cascade">
+                                    <span class="cascade-ring ring-1" aria-hidden="true"></span>
+                                    <span class="cascade-ring ring-2" aria-hidden="true"></span>
+                                    <span class="cascade-ring ring-3" aria-hidden="true"></span>
+                                    <div class="status-chart-wrap chart-ready chart-focus" data-chart-wrap>
 
-                                    <canvas id="statusChart"></canvas>
+                                        <canvas id="statusChart"></canvas>
 
+                                    </div>
                                 </div>
 
 
@@ -2362,9 +2233,44 @@ table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-
 
 
 
-                        <div class="chart-box small chart-ready chart-focus" data-chart-wrap>
+                        <?php
+                        /* Mirrors the Internship Status panel exactly (same
+                           .status-layout / .status-visual / .chart-cascade
+                           structure) so both donut panels line up and use
+                           the identical cascade animation. Colors match the
+                           JS `typePalette` array used by chartMeta.typeChart
+                           so the server-rendered fallback dots agree with
+                           the JS-built legend pills. */
+                        $type_dot_palette = ['#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#00E5FF', '#64748b'];
+                        ?>
+                        <div class="status-layout">
 
-                            <canvas id="typeChart"></canvas>
+                            <div class="status-visual">
+
+                                <div class="chart-cascade">
+                                    <span class="cascade-ring ring-1" aria-hidden="true"></span>
+                                    <span class="cascade-ring ring-2" aria-hidden="true"></span>
+                                    <span class="cascade-ring ring-3" aria-hidden="true"></span>
+                                    <div class="status-chart-wrap chart-ready chart-focus" data-chart-wrap>
+
+                                        <canvas id="typeChart"></canvas>
+
+                                    </div>
+                                </div>
+
+
+
+                                <div class="status-legend-list">
+
+                                    <?php foreach ($type_labels as $type_idx => $type_label): ?>
+
+                                        <div class="status-legend-item"><span class="status-dot" style="background:<?php echo h($type_dot_palette[$type_idx % count($type_dot_palette)]); ?>"></span><?php echo h($type_label); ?> (<?php echo (int)($type_values[$type_idx] ?? 0); ?>)</div>
+
+                                    <?php endforeach; ?>
+
+                                </div>
+
+                            </div>
 
                         </div>
 
@@ -2670,7 +2576,70 @@ table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-
 
 </div>
 
+<!-- =====================================================================
+     SHARED NOTIFICATION DETAIL MODAL
+     One instance for the whole dropdown — filled by JS on open, so
+     the notification loop above never duplicates modal markup.
+     ===================================================================== -->
+<div class="modal fade" id="notificationModal" tabindex="-1" aria-labelledby="notificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content notif-modal-content">
 
+            <div class="modal-header notif-modal-header">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="status-badge b-purple">Admin</span>
+                    <h5 class="modal-title mb-0" id="notificationModalLabel">Notification</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body notif-modal-body">
+                <div class="notif-modal-time">
+                    <i class="fa-regular fa-clock me-2"></i><span id="notifModalTime">-</span>
+                </div>
+
+                <!-- Full, non-truncated message. white-space:pre-wrap preserves
+                     line breaks; the body itself scrolls for very long text. -->
+                <div class="notif-modal-message" id="notifModalMessage"></div>
+
+                <hr class="notif-modal-divider">
+
+                <div class="notif-modal-attachment-section">
+                    <div class="notif-modal-section-label">
+                        <i class="fa-solid fa-paperclip me-2"></i>Attachment
+                    </div>
+
+                    <div id="notifAttachmentBlock" class="notif-attachment-card d-none">
+                        <div class="notif-attachment-icon" id="notifAttachmentIconWrap">
+                            <i class="fa-solid fa-file" id="notifAttachmentIcon"></i>
+                        </div>
+                        <div class="notif-attachment-info">
+                            <div class="notif-attachment-name" id="notifAttachmentName">-</div>
+                            <div class="notif-attachment-type" id="notifAttachmentType">-</div>
+                        </div>
+                        <div class="notif-attachment-actions">
+                            <a href="#" id="notifAttachmentView" target="_blank" class="btn btn-sm notif-btn-view">
+                                <i class="fa-solid fa-eye me-1"></i>View
+                            </a>
+                            <a href="#" id="notifAttachmentDownload" class="btn btn-sm notif-btn-download" download>
+                                <i class="fa-solid fa-download me-1"></i>Download
+                            </a>
+                        </div>
+                    </div>
+
+                    <div id="notifNoAttachment" class="empty-state d-none">
+                        <i class="fa-solid fa-circle-info me-2"></i>No attachment was included with this notification.
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer notif-modal-footer">
+                <button type="button" class="btn action-btn" data-bs-dismiss="modal">Close</button>
+            </div>
+
+        </div>
+    </div>
+</div>
 
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -2684,6 +2653,60 @@ function markNotificationsRead()
             if (badge) badge.style.display = "none";
         });
 }
+
+/* =====================================================================
+   NOTIFICATION DETAIL MODAL — populated from the clicked
+   "Read More" button's data-* attributes so text is never truncated.
+   ===================================================================== */
+(function setupNotificationModal(){
+    const modalEl = document.getElementById('notificationModal');
+    if (!modalEl) return;
+
+    modalEl.addEventListener('show.bs.modal', function (event) {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
+
+        const title            = trigger.getAttribute('data-notif-title') || 'Notification';
+        const message           = trigger.getAttribute('data-notif-message') || '';
+        const time               = trigger.getAttribute('data-notif-time') || '-';
+        const hasAttachment      = trigger.getAttribute('data-notif-has-attachment') === '1';
+        const attachmentUrl      = trigger.getAttribute('data-notif-attachment-url') || '';
+        const attachmentName     = trigger.getAttribute('data-notif-attachment-name') || '';
+        const attachmentIcon     = trigger.getAttribute('data-notif-attachment-icon') || 'fa-file';
+        const attachmentLabel    = trigger.getAttribute('data-notif-attachment-label') || 'File';
+        const attachmentColor    = trigger.getAttribute('data-notif-attachment-color') || '#64748b';
+
+        document.getElementById('notificationModalLabel').textContent = title;
+        document.getElementById('notifModalTime').textContent = time;
+        document.getElementById('notifModalMessage').textContent = message;
+
+        const attachmentBlock = document.getElementById('notifAttachmentBlock');
+        const noAttachmentBlock = document.getElementById('notifNoAttachment');
+
+        if (hasAttachment && attachmentUrl) {
+            attachmentBlock.classList.remove('d-none');
+            noAttachmentBlock.classList.add('d-none');
+
+            document.getElementById('notifAttachmentIcon').className = 'fa-solid ' + attachmentIcon;
+
+            const iconWrap = document.getElementById('notifAttachmentIconWrap');
+            iconWrap.style.color = attachmentColor;
+            iconWrap.style.background = attachmentColor + '1A';
+
+            document.getElementById('notifAttachmentName').textContent = attachmentName;
+            document.getElementById('notifAttachmentType').textContent = attachmentLabel;
+
+            const viewBtn = document.getElementById('notifAttachmentView');
+            const downloadBtn = document.getElementById('notifAttachmentDownload');
+            viewBtn.href = attachmentUrl;
+            downloadBtn.href = attachmentUrl;
+            downloadBtn.setAttribute('download', attachmentName);
+        } else {
+            attachmentBlock.classList.add('d-none');
+            noAttachmentBlock.classList.remove('d-none');
+        }
+    });
+})();
 
 (function createParticles(){
     const root = document.getElementById('fxParticles');
@@ -2794,26 +2817,29 @@ function decorateChartWrapper(wrapper, canvasId) {
     if (!meta) return;
 
 
-    if (canvasId === 'statusChart') {
-        const legend = wrapper.parentElement?.querySelector('.status-legend-list');
-        if (legend) {
-            legend.classList.add('chart-legend-pills');
-            legend.innerHTML = '';
-            meta.pills.forEach((item, index) => {
-                const pill = document.createElement('div');
-                pill.className = 'legend-pill';
-                pill.style.setProperty('--delay', `${index * 90}ms`);
-                pill.innerHTML = `
-                    <span class="swatch" style="background:${item.color}"></span>
-                    <span class="text">
-                        <span class="name">${item.label}</span>
-                        <span class="count">${item.valueLabel}</span>
-                    </span>
-                `;
-                legend.appendChild(pill);
-            });
-            legend.classList.add('visible');
-        }
+    /* Both donut panels now share the same .status-visual layout
+       (chart on the left, legend column on the right), so the legend
+       target is found relative to the wrapper rather than hard-coded
+       to a single chart id — this keeps statusChart and typeChart
+       decorated identically. */
+    const legend = wrapper.closest('.status-visual')?.querySelector('.status-legend-list');
+    if (legend) {
+        legend.classList.add('chart-legend-pills');
+        legend.innerHTML = '';
+        meta.pills.forEach((item, index) => {
+            const pill = document.createElement('div');
+            pill.className = 'legend-pill';
+            pill.style.setProperty('--delay', `${index * 110}ms`);
+            pill.innerHTML = `
+                <span class="swatch" style="background:${item.color}"></span>
+                <span class="text">
+                    <span class="name">${item.label}</span>
+                    <span class="count">${item.valueLabel}</span>
+                </span>
+            `;
+            legend.appendChild(pill);
+        });
+        legend.classList.add('visible');
         return;
     }
 
@@ -2959,7 +2985,19 @@ const chartData = {
             responsive: true,
             maintainAspectRatio: false,
             cutout: '68%',
-            animation: { duration: 2200, easing: 'easeOutQuart', animateRotate: true, animateScale: true },
+            /* "Stacked cascade" entrance: identical to typeChart below —
+               the ring rotates/scales in as a whole (animateRotate +
+               animateScale) while each wedge is additionally staggered
+               in on top of that via the per-index delay, so the slices
+               appear to stack in one after another rather than all
+               snapping in at once. */
+            animation: {
+                duration: 2200,
+                easing: 'easeOutQuart',
+                animateRotate: true,
+                animateScale: true,
+                delay: (ctx) => ctx.type === 'data' ? ctx.dataIndex * 120 : 0
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: { backgroundColor: 'rgba(255,255,255,.96)', titleColor: '#162033', bodyColor: '#162033', borderColor: 'rgba(123,97,255,.18)', borderWidth: 1, padding: 12, displayColors: false }
@@ -2981,8 +3019,17 @@ const chartData = {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            cutout: '62%',
-            animation: { duration: 2200, easing: 'easeOutQuart', animateRotate: true, animateScale: true },
+            cutout: '68%',
+            /* Same cascade timing/easing/stagger as statusChart above —
+               kept byte-for-byte identical on purpose so both panels
+               animate in exactly the same way. */
+            animation: {
+                duration: 2200,
+                easing: 'easeOutQuart',
+                animateRotate: true,
+                animateScale: true,
+                delay: (ctx) => ctx.type === 'data' ? ctx.dataIndex * 120 : 0
+            },
             plugins: {
                 legend: {
                     display: false
@@ -3036,9 +3083,8 @@ window.addEventListener('load', () => {
 });
 </script>
 
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
+
 </body>
 
 </html>
-
-
-

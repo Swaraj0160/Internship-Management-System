@@ -9,184 +9,328 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin')
     exit();
 }
 
-$search = "";
-$division = "";
-$internship_status = "";
-$internship_type = "";
+/* -----------------------------------------------------------------
+   REPLACE — sidebar propagation (batch 2) + fixes found while
+   rewiring this page:
 
-$query = "
-SELECT users.*,
-       internships.status AS internship_status,
-       internships.internship_type
+   1. SQL injection: search / division / internship_status /
+      internship_type were all string-concatenated raw from $_GET
+      into the query. Converted to one prepared statement built from
+      a $where[] array (same pattern used in export_students.php).
+   2. XSS: every $row[...] value (name, enrollment_no, division,
+      roll_no, email, phone, department) and the $search value
+      re-echoed into the search box were output with no escaping.
+      All now go through htmlspecialchars().
+   3. Ordering: replaced the REPLACE(UPPER(division),'SY-','') trick
+      (which ties IT-DA and IT-SMAD at 0 against each other) with the
+      explicit IT-DA-first / IT-SMAD-second / SY-* CASE ordering used
+      elsewhere in the project.
 
-FROM users
+   Filtering behavior, stat cards, and Edit/Delete links are
+   otherwise unchanged.
+   ----------------------------------------------------------------- */
 
-LEFT JOIN internships
-ON internships.id =
-(
-    SELECT id
-    FROM internships i2
-    WHERE i2.student_id = users.id
-    ORDER BY i2.id DESC
-    LIMIT 1
-)
+$search = trim($_GET['search'] ?? '');
+$division = trim($_GET['division'] ?? '');
+$internship_status = trim($_GET['internship_status'] ?? '');
+$internship_type = trim($_GET['internship_type'] ?? '');
 
-WHERE users.role='student'
-";
+$year = trim($_GET['year'] ?? '');
 
-if(isset($_GET['search']) && $_GET['search'] != "")
-{
-    $search = $_GET['search'];
-
-    $query .= "
-    AND
-(
-users.enrollment_no LIKE '%$search%'
-OR
-users.full_name LIKE '%$search%'
-)
-    ";
+// Fetch dynamic divisions based on current year filter (if any)
+$div_query = "SELECT DISTINCT division FROM users WHERE role='student' AND division IS NOT NULL AND TRIM(division) <> ''";
+if($year === 'TY') { $div_query .= " AND year_of_study='TY'"; }
+else if($year === 'SY') { $div_query .= " AND (year_of_study='SY' OR year_of_study IS NULL OR year_of_study = '')"; }
+$div_query .= " ORDER BY division";
+$div_res = mysqli_query($conn, $div_query);
+$dynamic_divisions = [];
+while($dr = mysqli_fetch_assoc($div_res)) {
+    $dynamic_divisions[] = $dr['division'];
 }
 
-if(isset($_GET['division']) && $_GET['division'] != "")
-{
-    $division = $_GET['division'];
+$where = ["users.role='student'"];
 
-    $query .= "
-    AND users.division='$division'
-    ";
+if($year !== '') {
+    if($year === 'TY') {
+        $where[] = "users.year_of_study='TY'";
+    } else if($year === 'SY') {
+        $where[] = "(users.year_of_study='SY' OR users.year_of_study IS NULL OR users.year_of_study = '')";
+    }
 }
 
-if(isset($_GET['internship_status']) && $_GET['internship_status'] != "")
-{
-    $internship_status = $_GET['internship_status'];
+$params = [];
+$types = "";
 
-    if($internship_status == "Not Submitted")
+if($search !== '')
+{
+    $where[] = "(users.enrollment_no LIKE ? OR users.full_name LIKE ?)";
+    $like = "%" . $search . "%";
+    $params[] = $like;
+    $params[] = $like;
+    $types .= "ss";
+}
+
+if($division !== '')
+{
+    $where[] = "users.division=?";
+    $params[] = $division;
+    $types .= "s";
+}
+
+if($internship_status !== '')
+{
+    if($internship_status === "Not Submitted")
     {
-        $query .= "
-        AND internships.id IS NULL
-        ";
+        $where[] = "internships.id IS NULL";
     }
     else
     {
-        $query .= "
-        AND internships.status='$internship_status'
-        ";
+        $where[] = "internships.status=?";
+        $params[] = $internship_status;
+        $types .= "s";
     }
 }
 
-if(isset($_GET['internship_type']) && $_GET['internship_type'] != "")
+if($internship_type !== '')
 {
-    $internship_type = $_GET['internship_type'];
-
-    $query .= "
-    AND internships.internship_type='$internship_type'
-    ";
+    $where[] = "internships.internship_type=?";
+    $params[] = $internship_type;
+    $types .= "s";
 }
 
-$query .= "
-ORDER BY
-CAST(
-    REPLACE(
-        UPPER(users.division),
-        'SY-',
-        ''
-    ) AS UNSIGNED
-) ASC,
-CAST(users.roll_no AS UNSIGNED) ASC
+$whereSql = implode(" AND ", $where);
+
+$query = "
+    SELECT users.*,
+           internships.status AS internship_status,
+           internships.internship_type
+
+    FROM users
+
+    LEFT JOIN internships
+        ON internships.id = (
+            SELECT id FROM internships i2
+            WHERE i2.student_id = users.id
+            ORDER BY i2.id DESC
+            LIMIT 1
+        )
+
+    WHERE $whereSql
+
+    ORDER BY
+        CASE users.division
+            WHEN 'IT-DA'   THEN 0
+            WHEN 'IT-SMAD' THEN 1
+            ELSE 2
+        END ASC,
+        users.division ASC,
+        CAST(users.roll_no AS UNSIGNED) ASC
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = $conn->prepare($query);
+
+if(count($params) > 0)
+{
+    $stmt->bind_param($types, ...$params);
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
+
+$activePage = 'manage_students.php';
 
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Manage Students</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
+
 
 <style>
-
-body{
-    background:#f1f5f9;
+:root {
+    --primary: #4f46e5;
+    --primary-glow: rgba(79,70,229,0.25);
+    --bg-color: #f3f4f6;
+    --text-main: #111827;
+    --text-muted: #6b7280;
+    --card-bg: rgba(255, 255, 255, 0.95);
+}
+* {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+html, body {
+    width: 100%; max-width: 100%; overflow-x: hidden; margin: 0;
+    background: #f3f4f6;
+    background-image: radial-gradient(circle at 10% 20%, rgba(91, 61, 245, 0.03) 0%, transparent 20%), 
+                      radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 20%);
+    background-attachment: fixed;
+    color: var(--text-main);
+}
+.page-inner { padding: 32px; }
+.container-box {
+    background: transparent;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    margin: 0;
 }
 
-.container-box{
-    width:98%;
-    margin:30px auto;
-    background:#fff;
-    padding:35px;
-    border-radius:22px;
-    box-shadow:0 10px 30px rgba(0,0,0,.08);
+/* Header */
+.page-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;
+}
+.page-header h2 { font-size: 1.6rem; font-weight: 800; color: #111827; margin-bottom: 4px; }
+.page-header p { font-size: 0.95rem; color: #6b7280; font-weight: 500; }
+.btn-add-student {
+    background: linear-gradient(135deg, #4f46e5, #3b82f6);
+    color: #fff; border: none; font-weight: 700; border-radius: 12px;
+    padding: 12px 24px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+}
+.btn-add-student:hover {
+    transform: translateY(-2px); box-shadow: 0 8px 20px rgba(79, 70, 229, 0.35); color:#fff;
 }
 
-table{
-    font-size:14px;
+/* Stat Cards */
+.stats-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 24px;
 }
+.stats-row-full {
+    display: grid; grid-template-columns: 1fr; margin-bottom: 32px;
+}
+.stat-card {
+    background: var(--card-bg); backdrop-filter: blur(10px);
+    border-radius: 20px; padding: 24px; border: 1px solid rgba(255,255,255,0.8);
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex; flex-direction: column; position: relative; overflow: hidden;
+    animation: fadeInUp 0.6s ease forwards;
+}
+.stat-card::before {
+    content: ''; position: absolute; inset: 0; z-index: -1;
+    background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 100%);
+}
+.stat-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1);
+    border-color: #fff;
+}
+.stat-icon {
+    width: 46px; height: 46px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+    color: #fff; margin-bottom: 16px; transition: transform 0.3s;
+}
+.stat-card:hover .stat-icon { transform: scale(1.1) rotate(5deg); }
+.stat-title { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.stat-value { font-size: 2rem; font-weight: 800; color: var(--text-main); line-height: 1; margin-bottom: 6px; }
+.stat-desc { font-size: 0.85rem; font-weight: 600; color: #94a3b8; }
 
-.search-box{
-    display:flex;
-    gap:10px;
-    margin-bottom:20px;
-    flex-wrap:wrap;
-}
-.form-control,
-.form-select{
-    height:48px;
-    border-radius:12px;
-}
+.stat-total .stat-icon { background: linear-gradient(135deg, #8b5cf6, #6d28d9); box-shadow: 0 8px 16px rgba(139,92,246,0.3); }
+.stat-approved .stat-icon { background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 8px 16px rgba(16,185,129,0.3); }
+.stat-pending .stat-icon { background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 8px 16px rgba(245,158,11,0.3); }
+.stat-rejected .stat-icon { background: linear-gradient(135deg, #ef4444, #dc2626); box-shadow: 0 8px 16px rgba(239,68,68,0.3); }
+.stat-notsubmitted .stat-icon { background: linear-gradient(135deg, #475569, #1e293b); box-shadow: 0 8px 16px rgba(71,85,105,0.3); }
 
-.btn-search{
-    height:48px;
-    border-radius:12px;
-    padding:0 26px;
+/* Main Panel */
+.card {
+    background: var(--card-bg) !important; backdrop-filter: blur(10px);
+    border-radius: 24px !important; border: 1px solid rgba(255,255,255,0.8) !important;
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05) !important;
+    animation: fadeInUp 0.8s ease forwards; animation-delay: 0.2s; opacity: 0;
 }
+.card-body { padding: 32px !important; }
 
-.btn-reset{
-    height:48px;
-    border-radius:12px;
-    padding:0 26px;
+/* Filter Toolbar */
+.filter-toolbar {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 24px;
 }
+.filter-toolbar-label { font-size: 1rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+.filter-toolbar-label i { color: #4f46e5; }
+.search-box { display: flex; flex: 1; gap: 12px; flex-wrap: wrap; }
+.form-control, .form-select {
+    height: 48px; border-radius: 12px; border: 2px solid #e2e8f0; font-size: 0.95rem; font-weight: 500;
+    transition: all 0.2s; background: #fff; box-shadow: none;
+}
+.form-control:focus, .form-select:focus {
+    border-color: #4f46e5; box-shadow: 0 0 0 4px rgba(79,70,229,0.1); outline: none;
+}
+.filter-input { flex: 1; min-width: 160px; }
+.filter-actions { display: flex; gap: 12px; }
+.btn-search {
+    background: linear-gradient(135deg, #4f46e5, #3b82f6); color: #fff; font-weight: 700; border-radius: 12px;
+    padding: 0 24px; border: none; box-shadow: 0 4px 12px rgba(79,70,229,0.2); transition: all 0.3s;
+    height: 48px;
+}
+.btn-search:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(79,70,229,0.3); color:#fff; }
+.btn-reset {
+    background: #fff; color: #475569; font-weight: 700; border-radius: 12px; border: 2px solid #e2e8f0;
+    padding: 0 24px; transition: all 0.3s; height: 48px; display: inline-flex; align-items: center;
+}
+.btn-reset:hover { background: #f8fafc; border-color: #cbd5e1; transform: translateY(-2px); text-decoration: none;}
 
-table td{
-    vertical-align:middle;
-}
 
-.email-col{
-    max-width:220px;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
+/* Table */
+.table-responsive {
+    border-radius: 16px; border: 1px solid #e2e8f0; overflow-y: auto; overflow-x: hidden; max-height: 640px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);
 }
+.table { margin-bottom: 0; background: #fff; table-layout: fixed; width: 100%; word-wrap: break-word; }
 
-.table tbody tr:hover{
-    background:#f8fafc;
-    transition:.2s;
+.table thead th {
+    background: #f8fafc; padding: 18px 20px; font-size: 0.8rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 2px solid #e2e8f0;
 }
-.name-col{
-    white-space:nowrap;
-}
+.table td { padding: 18px 20px; font-size: 0.95rem; font-weight: 500; color: #334155; vertical-align: middle; border-bottom: 1px solid #f1f5f9; }
+.table tbody tr { transition: background 0.2s; }
+.table tbody tr:hover { background: #f8fafc; }
+.badge { padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.3px; }
+.bg-success { background: rgba(16,185,129,0.1) !important; color: #059669 !important; border: 1px solid rgba(16,185,129,0.2); }
+.bg-warning { background: rgba(245,158,11,0.1) !important; color: #d97706 !important; border: 1px solid rgba(245,158,11,0.2); }
+.bg-danger { background: rgba(239,68,68,0.1) !important; color: #dc2626 !important; border: 1px solid rgba(239,68,68,0.2); }
+.bg-secondary { background: #f1f5f9 !important; color: #475569 !important; border: 1px solid #e2e8f0; }
 
+.btn-sm { font-weight: 700; border-radius: 8px; padding: 6px 14px; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.btn-primary.btn-sm { background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; }
+.btn-danger.btn-sm { background: linear-gradient(135deg, #f43f5e, #e11d48); border: none; }
+
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 768px) {
+    .stats-row { grid-template-columns: 1fr; }
+    .page-inner { padding: 16px; }
+    .card-body { padding: 20px !important; }
+    .search-box { flex-direction: column; }
+    .filter-input { width: 100%; }
+    .filter-actions { width: 100%; }
+    .btn-search, .btn-reset { flex: 1; }
+}
 </style>
+
 
 </head>
 
 <body>
 
+<?php include __DIR__ . '/includes/sidebar_nav.php'; ?>
+
+<div class="page-inner">
 <div class="container-box">
-    
-    <div class="d-flex justify-content-between align-items-center mb-4">
+
+    <div class="page-header">
 
     <div>
-
-        <a href="dashboard.php"
-           class="btn btn-primary mb-3"
-           style="border-radius:10px;">
-            ← Back
-        </a>
 
         <h2 class="fw-bold mb-1">
             Manage Students
@@ -198,11 +342,11 @@ table td{
 
     </div>
 
-    <div>
+    <div class="header-actions">
 
         <a href="add_student.php"
-           class="btn btn-success px-4 py-2"
-           style="border-radius:10px;font-weight:600;">
+           class="btn-add-student"
+           >
             + Add Student
         </a>
 
@@ -216,275 +360,102 @@ table td{
 <div class="card-body">
 
 <form method="GET">
-    
+
         <?php
 
-$total_students = mysqli_fetch_assoc(mysqli_query($conn,
-"SELECT COUNT(*) AS total
-FROM users
-WHERE role='student'"))['total'];
+$total_students = 0;
+$approved = 0;
+$pending = 0;
+$rejected = 0;
+$notSubmitted = 0;
 
-$approved = mysqli_fetch_assoc(mysqli_query($conn,
-"SELECT COUNT(*) AS total
-FROM internships
-WHERE status='Approved'"))['total'];
+while($row = mysqli_fetch_assoc($result)) {
+    $total_students++;
+    if ($row['internship_status'] == 'Approved') $approved++;
+    elseif ($row['internship_status'] == 'Pending') $pending++;
+    elseif ($row['internship_status'] == 'Rejected') $rejected++;
+    else $notSubmitted++;
+}
 
-$pending = mysqli_fetch_assoc(mysqli_query($conn,
-"SELECT COUNT(*) AS total
-FROM internships
-WHERE status='Pending'"))['total'];
-
-$rejected = mysqli_fetch_assoc(mysqli_query($conn,
-"SELECT COUNT(*) AS total
-FROM internships
-WHERE status='Rejected'"))['total'];
-
-$notSubmitted = $total_students - ($approved + $pending + $rejected);
+// Reset the result pointer so the table can loop through it again
+if(mysqli_num_rows($result) > 0) { mysqli_data_seek($result, 0); }
 
 ?>
 
-<div class="row g-4 mb-4">
 
-    <div class="col-lg col-md-6">
-
-        <div class="card border-0 shadow-sm text-white"
-             style="background:#1f2937;border-radius:18px;">
-
-            <div class="card-body">
-
-                <small class="fw-semibold">
-                    Total Students
-                </small>
-
-                <h2 class="fw-bold mt-2">
-                    <?php echo $total_students; ?>
-                </h2>
-
-            </div>
-
-        </div>
-
+<div class="stats-row">
+    <div class="stat-card stat-total" style="animation-delay: 0.05s">
+        <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
+        <div class="stat-title">Total Students</div>
+        <div class="stat-value"><?php echo number_format($total_students); ?></div>
+        <div class="stat-desc">Registered Students</div>
     </div>
-
-    <div class="col-lg col-md-6">
-
-        <div class="card border-0 shadow-sm text-white"
-             style="background:#16a34a;border-radius:18px;">
-
-            <div class="card-body">
-
-                <small class="fw-semibold">
-                    Approved
-                </small>
-
-                <h2 class="fw-bold mt-2">
-                    <?php echo $approved; ?>
-                </h2>
-
-            </div>
-
-        </div>
-
+    <div class="stat-card stat-approved" style="animation-delay: 0.1s">
+        <div class="stat-icon"><i class="bi bi-patch-check-fill"></i></div>
+        <div class="stat-title">Approved</div>
+        <div class="stat-value"><?php echo number_format($approved); ?></div>
+        <div class="stat-desc">Internships Approved</div>
     </div>
-
-    <div class="col-lg col-md-6">
-
-        <div class="card border-0 shadow-sm text-dark"
-             style="background:#facc15;border-radius:18px;">
-
-            <div class="card-body">
-
-                <small class="fw-semibold">
-                    Pending
-                </small>
-
-                <h2 class="fw-bold mt-2">
-                    <?php echo $pending; ?>
-                </h2>
-
-            </div>
-
-        </div>
-
+    <div class="stat-card stat-pending" style="animation-delay: 0.15s">
+        <div class="stat-icon"><i class="bi bi-hourglass-split"></i></div>
+        <div class="stat-title">Pending</div>
+        <div class="stat-value"><?php echo number_format($pending); ?></div>
+        <div class="stat-desc">Awaiting Review</div>
     </div>
-
-    <div class="col-lg col-md-6">
-
-        <div class="card border-0 shadow-sm text-white"
-             style="background:#ef4444;border-radius:18px;">
-
-            <div class="card-body">
-
-                <small class="fw-semibold">
-                    Rejected
-                </small>
-
-                <h2 class="fw-bold mt-2">
-                    <?php echo $rejected; ?>
-                </h2>
-
-            </div>
-
-        </div>
-
+    <div class="stat-card stat-rejected" style="animation-delay: 0.2s">
+        <div class="stat-icon"><i class="bi bi-x-circle-fill"></i></div>
+        <div class="stat-title">Rejected</div>
+        <div class="stat-value"><?php echo number_format($rejected); ?></div>
+        <div class="stat-desc">Internships Rejected</div>
     </div>
-
-    <div class="col-lg col-md-6">
-
-        <div class="card border-0 shadow-sm text-white"
-             style="background:#6b7280;border-radius:18px;">
-
-            <div class="card-body">
-
-                <small class="fw-semibold">
-                    Not Submitted
-                </small>
-
-                <h2 class="fw-bold mt-2">
-                    <?php echo $notSubmitted; ?>
-                </h2>
-
-            </div>
-
-        </div>
-
-    </div>
-
 </div>
+<div class="stats-row-full">
+    <div class="stat-card stat-notsubmitted" style="animation-delay: 0.25s; flex-direction: row; align-items: center; justify-content: space-between; padding: 24px 32px;">
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <div class="stat-icon" style="margin-bottom: 0; width: 56px; height: 56px; font-size: 1.6rem;"><i class="bi bi-file-earmark-excel-fill"></i></div>
+            <div>
+                <div class="stat-title">Not Submitted</div>
+                <div class="stat-desc" style="font-size: 0.95rem; color: #94a3b8; font-weight:600">No Internship Submitted</div>
+            </div>
+        </div>
+        <div class="stat-value" style="margin-bottom: 0; font-size: 2.5rem;"><?php echo number_format($notSubmitted); ?></div>
+    </div>
+</div>
+<div class="filter-toolbar">
+
+        <div class="filter-toolbar-label">
+            <i class="bi bi-sliders"></i>
+            Filters
+        </div>
 
         <div class="search-box">
 
             <input type="text"
                    name="search"
-                   class="form-control"
+                   class="form-control filter-input search-input"
                    placeholder="Search Enrollment No"
-                   value="<?php echo $search; ?>"
-                   style="width:250px;">
+                   value="<?php echo htmlspecialchars($search, ENT_QUOTES, 'UTF-8'); ?>">
 
-            <select name="division"
-                    class="form-control"
-                    style="width:220px;">
-
-                <option value="">
-                    All Divisions
-                </option>
-
-                <option value="SY-1"
-                <?php if($division=="SY-1") echo "selected"; ?>>
-                SY-1
-                </option>
-
-                <option value="SY-2"
-                <?php if($division=="SY-2") echo "selected"; ?>>
-                SY-2
-                </option>
-
-                <option value="SY-3"
-                <?php if($division=="SY-3") echo "selected"; ?>>
-                SY-3
-                </option>
-
-                <option value="SY-4"
-                <?php if($division=="SY-4") echo "selected"; ?>>
-                SY-4
-                </option>
-
-                <option value="SY-5"
-                <?php if($division=="SY-5") echo "selected"; ?>>
-                SY-5
-                </option>
-                
-                <option value="SY-6"
-                <?php if($division=="SY-6") echo "selected"; ?>>
-                SY-6
-                </option>
-                
-                <option value="SY-7"
-                <?php if($division=="SY-7") echo "selected"; ?>>
-                SY-7
-                </option>
-                
-                <option value="SY-8"
-                <?php if($division=="SY-8") echo "selected"; ?>>
-                SY-8
-                </option>
-                
-                <option value="SY-9"
-                <?php if($division=="SY-9") echo "selected"; ?>>
-                SY-9
-                </option>
-                
-                <option value="SY-10"
-                <?php if($division=="SY-10") echo "selected"; ?>>
-                SY-10
-                </option>
-                
-                <option value="SY-11"
-                <?php if($division=="SY-11") echo "selected"; ?>>
-                SY-11
-                </option>
-                
-                <option value="SY-12"
-                <?php if($division=="SY-12") echo "selected"; ?>>
-                SY-12
-                </option>
-                
-                <option value="SY-13"
-                <?php if($division=="SY-13") echo "selected"; ?>>
-                SY-13
-                </option>
-                
-                <option value="SY-14"
-                <?php if($division=="SY-14") echo "selected"; ?>>
-                SY-14
-                </option>
-                
-                
-                <option value="SY-15"
-                <?php if($division=="SY-15") echo "selected"; ?>>
-                SY-15
-                </option>
-                
-                <option value="SY-16"
-                <?php if($division=="SY-16") echo "selected"; ?>>
-                SY-16
-                </option>
-                
-                <option value="SY-17"
-                <?php if($division=="SY-17") echo "selected"; ?>>
-                SY-17
-                </option>
-                
-                <option value="SY-18"
-                <?php if($division=="SY-18") echo "selected"; ?>>
-                SY-18
-                </option>
-                
-                <option value="SY-19"
-                <?php if($division=="SY-19") echo "selected"; ?>>
-                SY-19
-                </option>
-                
-                <option value="SY-20"
-                <?php if($division=="SY-20") echo "selected"; ?>>
-                SY-20
-                </option>
-                
-                <option value="SY-21"
-                <?php if($division=="SY-21") echo "selected"; ?>>
-                SY-21
-                </option>
-                
-                <option value="SY-22"
-                <?php if($division=="SY-22") echo "selected"; ?>>
-                SY-22
-                </option>
-
+            
+            
+            <select name="year" class="form-control filter-input">
+                <option value="">All Academic Years</option>
+                <option value="SY" <?php if($year=="SY") echo "selected"; ?>>Second Year (SY)</option>
+                <option value="TY" <?php if($year=="TY") echo "selected"; ?>>Third Year (TY)</option>
             </select>
 
+<select name="division" class="form-control filter-input division-input">
+                <option value="">All Divisions</option>
+                <?php foreach($dynamic_divisions as $div): ?>
+                    <option value="<?php echo htmlspecialchars($div); ?>" <?php if($division==$div) echo "selected"; ?>>
+                        <?php echo htmlspecialchars($div); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+
+
             <select name="internship_status"
-                    class="form-control"
-                    style="width:250px;">
+                    class="form-control filter-input status-input">
 
                 <option value="">
                     All Internship Status
@@ -513,8 +484,7 @@ $notSubmitted = $total_students - ($approved + $pending + $rejected);
             </select>
 
 <select name="internship_type"
-        class="form-control"
-        style="width:300px;">
+        class="form-control filter-input type-input">
 
     <option value="">
         All Internship Types
@@ -547,19 +517,25 @@ International Internship / Visit
 
 </select>
 
+            <div class="filter-actions">
+
             <button type="submit"
-                    class="btn btn-success">
+                    class="btn btn-success btn-search">
 
                 Search
 
             </button>
 
             <a href="manage_students.php"
-               class="btn btn-secondary">
+               class="btn btn-secondary btn-reset">
 
                Reset
 
             </a>
+
+            </div>
+
+        </div>
 
         </div>
 
@@ -573,22 +549,29 @@ International Internship / Visit
 <table class="table table-hover align-middle mb-0">
 
         <thead style="
-background:#1f2937;
-color:white;
+background:#F8FAFC;
+color:#475569;
+border-bottom:1px solid #E7EAEE;
+box-shadow:0 1px 0 rgba(15,23,42,.04);
 ">
 
+            <!-- Column widths below are percentages that sum to exactly
+                 100%. Combined with table-layout:fixed on .table (see
+                 <style> above), the table can never render wider than its
+                 container, which is what removes the horizontal
+                 scrollbar this page used to need. -->
             <tr>
 
-                <th>Name</th>
-                <th>Enrollment No</th>
-                <th>Division</th>
-                <th>Roll No</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Department</th>
-                <th>Internship Status</th>
-                <th>Internship Type</th>
-                <th>Action</th>
+                <th style="width:13%;">Name</th>
+                <th style="width:12%;">Enrollment No</th>
+                <th style="width:8%;">Division</th>
+                <th style="width:7%;">Roll No</th>
+                <th style="width:12%;">Email</th>
+                <th style="width:9%;">Phone</th>
+                <th style="width:8%;">Department</th>
+                <th style="width:10%;">Internship Status</th>
+                <th style="width:11%;">Internship Type</th>
+                <th style="width:10%;">Action</th>
 
             </tr>
 
@@ -606,31 +589,31 @@ color:white;
         <tr>
 
             <td>
-                <?php echo $row['full_name']; ?>
+                <?php echo htmlspecialchars($row['full_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['enrollment_no']; ?>
+                <?php echo htmlspecialchars($row['enrollment_no'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['division']; ?>
+                <?php echo htmlspecialchars($row['division'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['roll_no']; ?>
+                <?php echo htmlspecialchars($row['roll_no'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td class="email-col">
-<?php echo $row['email']; ?>
+<?php echo htmlspecialchars($row['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
             <td>
-                <?php echo $row['phone']; ?>
+                <?php echo htmlspecialchars($row['phone'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
-                <?php echo $row['department']; ?>
+                <?php echo htmlspecialchars($row['department'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
             </td>
 
             <td>
@@ -671,7 +654,7 @@ else
 
                 if($row['internship_type'] != "")
 {
-    echo $row['internship_type'];
+    echo htmlspecialchars($row['internship_type'], ENT_QUOTES, 'UTF-8');
 }
 else
 {
@@ -684,14 +667,14 @@ else
 
             <td>
 
-<div class="d-flex gap-2">
+<div class="d-flex gap-2" style="flex-wrap:wrap;">
 
-<a href="edit_student.php?id=<?php echo $row['id']; ?>&return=<?php echo urlencode($_SERVER['QUERY_STRING']); ?>"
+<a href="edit_student.php?id=<?php echo (int)$row['id']; ?>&return=<?php echo urlencode($_SERVER['QUERY_STRING']); ?>"
    class="btn btn-primary btn-sm">
     Edit
 </a>
 
-<a href="delete_student.php?id=<?php echo $row['id']; ?>&return=<?php echo urlencode($_SERVER['QUERY_STRING']); ?>"
+<a href="delete_student.php?id=<?php echo (int)$row['id']; ?>&return=<?php echo urlencode($_SERVER['QUERY_STRING']); ?>"
    class="btn btn-danger btn-sm"
    onclick="return confirm('Are you sure you want to delete this student?');">
     Delete
@@ -715,6 +698,10 @@ else
     </div>
 
 </div>
+</div>
+
+</main>
+</div>
 
 <script>
 window.addEventListener("beforeunload", function () {
@@ -732,6 +719,8 @@ window.addEventListener("load", function () {
 
 });
 </script>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 </html>

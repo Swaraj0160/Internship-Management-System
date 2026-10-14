@@ -20,13 +20,22 @@ if(!isset($_GET['id']))
     exit();
 }
 
-$update_id = $_GET['id'];
+/* -----------------------------------------------------------------
+   REPLACE — sidebar propagation (Phase 2) + one real fix made while
+   touching this file: $update_id came straight from $_GET['id'] and
+   was concatenated directly into the SQL WHERE clause (SQL
+   injection). Cast to int and switched to a prepared statement.
+   Output that was previously echoed with no escaping (company_name,
+   work_done, update_file filename) now goes through
+   htmlspecialchars().
+   ----------------------------------------------------------------- */
+
+$update_id = (int)$_GET['id'];
 
 /* FETCH UPDATE */
 
-$query = mysqli_query(
-    $conn,
-    "SELECT 
+$stmt = $conn->prepare(
+    "SELECT
         weekly_updates.*,
         internships.company_name
 
@@ -35,9 +44,12 @@ $query = mysqli_query(
      INNER JOIN internships
      ON weekly_updates.internship_id = internships.id
 
-     WHERE weekly_updates.id='$update_id'
-     AND internships.student_id='$student_id'"
+     WHERE weekly_updates.id=?
+     AND internships.student_id=?"
 );
+$stmt->bind_param("ii", $update_id, $student_id);
+$stmt->execute();
+$query = $stmt->get_result();
 
 if(mysqli_num_rows($query) == 0)
 {
@@ -46,6 +58,8 @@ if(mysqli_num_rows($query) == 0)
 }
 
 $data = mysqli_fetch_assoc($query);
+
+$activePage = 'my_updates.php';
 if($data['review_status'] == 'Accepted')
 {
     echo "
@@ -152,17 +166,24 @@ WHERE id='$update_id'"
 <title>Edit Weekly Work</title>
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 
 <style>
 
 body{
     background:#f1f5f9;
+    margin:0;
+}
+
+.page-inner{
+    padding:0 24px 40px;
 }
 
 .form-box{
     width:800px;
+    max-width:100%;
     margin:auto;
-    margin-top:40px;
+    margin-top:24px;
     background:white;
     padding:30px;
     border-radius:15px;
@@ -175,6 +196,9 @@ body{
 
 <body>
 
+<?php include __DIR__ . '/includes/sidebar_nav.php'; ?>
+
+<div class="page-inner">
 <div class="form-box">
 
     <h2 class="mb-4 text-center">
@@ -187,13 +211,13 @@ body{
 
         <strong>Company:</strong>
 
-        <?php echo $data['company_name']; ?>
+        <?php echo htmlspecialchars($data['company_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 
         <br><br>
 
         <strong>Week:</strong>
 
-        Week <?php echo $data['week_no']; ?>
+        Week <?php echo (int)$data['week_no']; ?>
 
     </div>
 
@@ -210,7 +234,7 @@ body{
             <textarea name="work_done"
                       class="form-control"
                       rows="8"
-                      required><?php echo $data['work_done']; ?></textarea>
+                      required><?php echo htmlspecialchars($data['work_done'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
 
         </div>
 
@@ -230,7 +254,7 @@ body{
             {
             ?>
 
-            <a href="../uploads/weekly_reports/<?php echo $data['update_file']; ?>"
+            <a href="../uploads/weekly_reports/<?php echo rawurlencode($data['update_file']); ?>"
                target="_blank">
 
                View Current File
@@ -272,6 +296,12 @@ body{
     </form>
 
 </div>
+</div>
+
+</main>
+</div>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 </html>

@@ -3,14 +3,25 @@
 session_start();
 include("../config.php");
 
-$division = $_GET['division'];
+if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin')
+{
+    header("Location: ../login.php");
+    exit();
+}
+
+$division = trim($_GET['division'] ?? '');
+
+if($division === '')
+{
+    die("Division is required.");
+}
 
 header("Content-Type: application/vnd.ms-excel");
-header("Content-Disposition: attachment; filename=Internship_Report_$division.xls");
+header("Content-Disposition: attachment; filename=Internship_Report_" . preg_replace('/[^A-Za-z0-9_\-]/', '_', $division) . ".xls");
 
 $query = "
 
-SELECT 
+SELECT
 users.full_name,
 users.division,
 internships.company_name,
@@ -33,13 +44,16 @@ INNER JOIN
 ) latest
 ON internships.id = latest.latest_id
 
-WHERE users.division='$division'
+WHERE users.division=?
 
-ORDER BY users.roll_no ASC
+ORDER BY CAST(users.roll_no AS UNSIGNED) ASC
 
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = $conn->prepare($query);
+$stmt->bind_param("s", $division);
+$stmt->execute();
+$result = $stmt->get_result();
 
 ?>
 
@@ -67,14 +81,14 @@ while($row = mysqli_fetch_assoc($result))
 
 <tr>
 
-    <td><?php echo $row['full_name']; ?></td>
-    <td><?php echo $row['division']; ?></td>
-    <td><?php echo $row['company_name']; ?></td>
-    <td><?php echo $row['internship_role']; ?></td>
-    <td><?php echo $row['internship_type']; ?></td>
-    <td><?php echo $row['start_date']; ?></td>
-    <td><?php echo $row['end_date']; ?></td>
-    <td><?php echo $row['status']; ?></td>
+    <td><?php echo htmlspecialchars($row['full_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><?php echo htmlspecialchars($row['division'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><?php echo htmlspecialchars($row['company_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><?php echo htmlspecialchars($row['internship_role'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><?php echo htmlspecialchars($row['internship_type'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><?php echo htmlspecialchars($row['start_date'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><?php echo htmlspecialchars($row['end_date'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+    <td><?php echo htmlspecialchars($row['status'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
 
 </tr>
 

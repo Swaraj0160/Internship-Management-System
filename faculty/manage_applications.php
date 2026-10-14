@@ -9,20 +9,76 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'faculty')
     exit();
 }
 
-$faculty_id = $_SESSION['user_id'];
+/* -----------------------------------------------------------------
+   REPLACE — Phase 2: sidebar propagation + fixes found while
+   rewiring this page:
 
-$faculty_query = "SELECT * FROM users
-                  WHERE id='$faculty_id'";
+   1. Ordering bug: the old query used
+      FIELD(users.division, 'IT-DA', 'IT-SMAD') ASC — MySQL's FIELD()
+      returns 0 for any value NOT in the list and 1/2 for matches, so
+      ASC actually sorted every OTHER division (SY-1..22, value 0)
+      BEFORE IT-DA and IT-SMAD (values 1 and 2) — the exact opposite
+      of "IT-DA first, IT-SMAD second". Replaced with the same
+      explicit CASE ordering used everywhere else in the project.
+   2. SQL injection: $_GET['status'] was concatenated directly into
+      the query ("AND li.status='$status_filter'"). Converted the
+      whole filter chain to a prepared statement.
+   3. XSS: every $row[...] value (name, enrollment_no, division,
+      roll_no, company, contact, role, mentor, internship_type,
+      rejection_reason) and the offer_letter path were echoed with no
+      escaping. All now go through htmlspecialchars() /
+      rawurlencode() for the file path.
 
+   Dual-division logic (faculty_divisions with legacy fallback),
+   stat cards, filters, and Approve/Reject/Undo action links are
+   otherwise unchanged.
+   ----------------------------------------------------------------- */
+
+$faculty_id = (int)$_SESSION['user_id'];
+
+$faculty_query = "SELECT * FROM users WHERE id='$faculty_id'";
 $faculty_result = mysqli_query($conn, $faculty_query);
-
 $faculty = mysqli_fetch_assoc($faculty_result);
 
-$faculty_division = $faculty['faculty_division'];
+/* Get all divisions assigned to this faculty account. */
+$faculty_divisions = [];
 
-$search = "";
-$status_filter = "";
-$type_filter = "";
+$division_query = "SELECT division
+                   FROM faculty_divisions
+                   WHERE faculty_id='$faculty_id'
+                   ORDER BY division ASC";
+
+$division_result = mysqli_query($conn, $division_query);
+
+if($division_result)
+{
+    while($division_row = mysqli_fetch_assoc($division_result))
+    {
+        $division_value = trim($division_row['division']);
+
+        if($division_value !== '' && !in_array($division_value, $faculty_divisions, true))
+        {
+            $faculty_divisions[] = $division_value;
+        }
+    }
+}
+
+/* Fallback for older faculty accounts still using users.faculty_division. */
+if(empty($faculty_divisions) && !empty($faculty['faculty_division']))
+{
+    $faculty_divisions[] = trim($faculty['faculty_division']);
+}
+
+$faculty_division = implode(', ', $faculty_divisions);
+
+if(empty($faculty_divisions))
+{
+    $faculty_divisions = ['__none__']; // guarantees the IN() below matches nothing
+}
+
+$search = trim($_GET['search'] ?? '');
+$status_filter = trim($_GET['status'] ?? '');
+$type_filter = trim($_GET['internship_type'] ?? '');
 
 /* ONE COMMON LATEST-INTERNSHIP SUBQUERY */
 $latest_internship_sql = "
@@ -37,164 +93,94 @@ $latest_internship_sql = "
        AND latest.max_id = i.id
 ";
 
-/* MAIN TABLE QUERY */
+$divPlaceholders = implode(',', array_fill(0, count($faculty_divisions), '?'));
+$divTypes = str_repeat('s', count($faculty_divisions));
+
+$where = ["users.division IN ($divPlaceholders)"];
+$params = $faculty_divisions;
+$types = $divTypes;
+
+if($search !== '')
+{
+    $where[] = "(users.full_name LIKE ? OR li.company_name LIKE ? OR users.enrollment_no LIKE ? OR li.internship_type LIKE ?)";
+    $like = "%" . $search . "%";
+    array_push($params, $like, $like, $like, $like);
+    $types .= "ssss";
+}
+
+if($status_filter !== '')
+{
+    $where[] = "li.status=?";
+    $params[] = $status_filter;
+    $types .= "s";
+}
+
+if($type_filter !== '')
+{
+    $where[] = "TRIM(li.internship_type)=?";
+    $params[] = $type_filter;
+    $types .= "s";
+}
+
+$whereSql = implode(" AND ", $where);
+
 $query = "
+    SELECT
+        li.*,
+        users.full_name,
+        users.enrollment_no,
+        users.division,
+        users.roll_no
 
-SELECT
-    li.*,
-    users.full_name,
-    users.enrollment_no,
-    users.division,
-    users.roll_no
+    FROM users
 
-FROM users
+    JOIN ($latest_internship_sql) li
+        ON li.student_id = users.id
 
-JOIN (
-    $latest_internship_sql
-) li
-ON li.student_id = users.id
+    WHERE $whereSql
 
-WHERE users.division='$faculty_division'
-
+    ORDER BY
+        CASE users.division
+            WHEN 'IT-DA'   THEN 0
+            WHEN 'IT-SMAD' THEN 1
+            ELSE 2
+        END ASC,
+        users.division ASC,
+        CAST(TRIM(users.roll_no) AS UNSIGNED) ASC
 ";
 
-if(isset($_GET['search']) && $_GET['search'] != "")
+$stmt = $conn->prepare($query);
+$stmt->bind_param($types, ...$params);
+$stmt->execute();
+$result = $stmt->get_result();
+
+/* COUNT + TYPE-BREAKDOWN QUERIES — same division scoping, no user input */
+function facultyAppCount(mysqli $conn, string $latestSql, array $divisions, string $extraSql = ''): int
 {
-    $search = mysqli_real_escape_string(
-        $conn,
-        $_GET['search']
-    );
-
-    $query .= " AND (
-                    users.full_name LIKE '%$search%'
-                    OR li.company_name LIKE '%$search%'
-                    OR users.enrollment_no LIKE '%$search%'
-                    OR li.internship_type LIKE '%$search%'
-                )";
-}
-
-if(isset($_GET['status']) && $_GET['status'] != "")
-{
-    $status_filter = $_GET['status'];
-
-    $query .= " AND li.status='$status_filter'";
-}
-
-if(isset($_GET['internship_type']) && $_GET['internship_type'] != "")
-{
-    $type_filter = mysqli_real_escape_string(
-        $conn,
-        trim($_GET['internship_type'])
-    );
-
-    $query .= "
-    AND TRIM(li.internship_type)
-        = '$type_filter'
+    $divPlaceholders = implode(',', array_fill(0, count($divisions), '?'));
+    $types = str_repeat('s', count($divisions));
+    $sql = "
+        SELECT COUNT(*) AS total
+        FROM users
+        JOIN ($latestSql) li ON li.student_id = users.id
+        WHERE users.division IN ($divPlaceholders)
+        $extraSql
     ";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param($types, ...$divisions);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    return (int)($row['total'] ?? 0);
 }
 
-$query .= " ORDER BY
-            CAST(TRIM(users.roll_no) AS UNSIGNED) ASC,
-            users.full_name ASC";
+$total_applications = facultyAppCount($conn, $latest_internship_sql, $faculty_divisions);
+$problem_count = facultyAppCount($conn, $latest_internship_sql, $faculty_divisions, "AND li.status='Approved' AND li.internship_type='Problem-based Internship'");
+$training_count = facultyAppCount($conn, $latest_internship_sql, $faculty_divisions, "AND li.status='Approved' AND li.internship_type='Training + Mini Project'");
+$realworld_count = facultyAppCount($conn, $latest_internship_sql, $faculty_divisions, "AND li.status='Approved' AND li.internship_type='Real-world Exposure Internship (Field Work)'");
+$research_count = facultyAppCount($conn, $latest_internship_sql, $faculty_divisions, "AND li.status='Approved' AND li.internship_type='Research Internship'");
+$international_count = facultyAppCount($conn, $latest_internship_sql, $faculty_divisions, "AND li.status='Approved' AND li.internship_type='International Internship / Visit'");
 
-$result = mysqli_query($conn, $query);
-
-/* COUNT QUERY - SAME LOGIC */
-$count_query = "
-
-SELECT COUNT(*) as total
-
-FROM users
-
-JOIN (
-    $latest_internship_sql
-) li
-ON li.student_id = users.id
-
-WHERE users.division='$faculty_division'
-
-";
-
-$count_result = mysqli_query($conn, $count_query);
-
-$count_row = mysqli_fetch_assoc($count_result);
-
-$total_records = $count_row['total'];
-
-
-/* INTERNSHIP TYPE COUNTS - SAME LATEST RECORD LOGIC */
-
-$total_applications = mysqli_num_rows(mysqli_query($conn,"
-SELECT li.id
-FROM users
-JOIN (
-    $latest_internship_sql
-) li
-ON li.student_id = users.id
-WHERE users.division='$faculty_division'
-"));
-
-$problem_count = mysqli_num_rows(mysqli_query($conn,"
-SELECT li.id
-FROM users
-JOIN (
-    $latest_internship_sql
-) li
-ON li.student_id = users.id
-WHERE users.division='$faculty_division'
-AND li.status='Approved'
-AND li.internship_type='Problem-based Internship'
-"));
-
-$training_count = mysqli_num_rows(mysqli_query($conn,"
-SELECT li.id
-FROM users
-JOIN (
-    $latest_internship_sql
-) li
-ON li.student_id = users.id
-WHERE users.division='$faculty_division'
-AND li.status='Approved'
-AND li.internship_type='Training + Mini Project'
-"));
-
-$realworld_count = mysqli_num_rows(mysqli_query($conn,"
-SELECT li.id
-FROM users
-JOIN (
-    $latest_internship_sql
-) li
-ON li.student_id = users.id
-WHERE users.division='$faculty_division'
-AND li.status='Approved'
-AND li.internship_type='Real-world Exposure Internship (Field Work)'
-"));
-
-$research_count = mysqli_num_rows(mysqli_query($conn,"
-SELECT li.id
-FROM users
-JOIN (
-    $latest_internship_sql
-) li
-ON li.student_id = users.id
-WHERE users.division='$faculty_division'
-AND li.status='Approved'
-AND li.internship_type='Research Internship'
-"));
-
-$international_count = mysqli_num_rows(mysqli_query($conn,"
-SELECT li.id
-FROM users
-JOIN (
-    $latest_internship_sql
-) li
-ON li.student_id = users.id
-WHERE users.division='$faculty_division'
-AND li.status='Approved'
-AND li.internship_type='International Internship / Visit'
-"));
-
-
+$activePage = 'manage_applications.php';
 
 ?>
 
@@ -213,6 +199,7 @@ href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.m
 
 
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 
 
 <style>
@@ -222,11 +209,16 @@ body{
     background:#eef3f9;
 
     font-family:'Poppins',sans-serif;
+    margin:0;
 
 }
 
+.page-inner{
+    padding:0 20px 40px;
+}
+
 .container-box{
-    width:99%;
+    width:100%;
     margin:auto;
     margin-top:20px;
     background:white;
@@ -276,6 +268,17 @@ body{
 .action-buttons .btn{
     font-size:11px;
     padding:3px 6px;
+}
+
+/* SMALL UNDO BUTTON */
+
+.text-center .btn-warning.btn-sm,
+.text-center .btn-secondary.btn-sm{
+    font-size:10px;
+    padding:4px 8px;
+    width:55px;
+    min-width:55px;
+    border-radius:6px;
 }
 
 /* REJECTION REASON */
@@ -374,6 +377,12 @@ a{
     }
 }
 
+@media(max-width:576px){
+    .row.g-3.mb-4 > div{
+        margin-bottom:8px;
+    }
+}
+
 .page-header{
 
     background:#fff;
@@ -447,6 +456,9 @@ a{
 
 <body>
 
+<?php include __DIR__ . '/includes/sidebar_nav.php'; ?>
+
+<div class="page-inner">
 <div class="container-box">
 
 <div class="page-header">
@@ -454,11 +466,6 @@ a{
     <div class="d-flex justify-content-between align-items-center flex-wrap">
 
         <div>
-
-            <a href="dashboard.php" class="btn btn-outline-primary mb-3">
-                <i class="bi bi-arrow-left"></i>
-                Back to Dashboard
-            </a>
 
             <h2 class="page-title">
                 Internship Applications
@@ -477,7 +484,7 @@ a{
                 <i class="bi bi-mortarboard-fill"></i>
 
                 Division :
-                <?php echo $faculty_division; ?>
+                <?php echo htmlspecialchars($faculty_division, ENT_QUOTES, 'UTF-8'); ?>
 
             </span>
 
@@ -492,42 +499,42 @@ a{
     <div class="col-md-2">
     <div class="type-card bg-dark">
         <h6>Total Applications</h6>
-        <h3><?php echo $total_applications; ?></h3>
+        <h3><?php echo (int)$total_applications; ?></h3>
     </div>
 </div>
 
     <div class="col-md-2">
         <div class="type-card bg-primary">
             <h6>Problem Based</h6>
-            <h3><?php echo $problem_count; ?></h3>
+            <h3><?php echo (int)$problem_count; ?></h3>
         </div>
     </div>
 
     <div class="col-md-2">
         <div class="type-card bg-success">
             <h6>Training + Project</h6>
-            <h3><?php echo $training_count; ?></h3>
+            <h3><?php echo (int)$training_count; ?></h3>
         </div>
     </div>
 
     <div class="col-md-2">
         <div class="type-card bg-info">
             <h6>Real World</h6>
-            <h3><?php echo $realworld_count; ?></h3>
+            <h3><?php echo (int)$realworld_count; ?></h3>
         </div>
     </div>
 
     <div class="col-md-2">
         <div class="type-card bg-warning text-dark">
             <h6>Research</h6>
-            <h3><?php echo $research_count; ?></h3>
+            <h3><?php echo (int)$research_count; ?></h3>
         </div>
     </div>
 
     <div class="col-md-2">
         <div class="type-card bg-danger">
             <h6>International</h6>
-            <h3><?php echo $international_count; ?></h3>
+            <h3><?php echo (int)$international_count; ?></h3>
         </div>
     </div>
 
@@ -541,7 +548,7 @@ a{
        name="search"
        class="form-control"
        placeholder="Search Student / Company / Enrollment / Internship Type"
-       value="<?php echo $search; ?>">
+       value="<?php echo htmlspecialchars($search, ENT_QUOTES, 'UTF-8'); ?>">
 
 </div>
 
@@ -631,7 +638,7 @@ Reset
 
 </form>
 
-<div class="table-responsive" style="overflow-x:hidden;">
+<div class="table-responsive" style="overflow-x:auto;">
 
 <table class="table table-bordered table-hover align-middle">
 
@@ -669,31 +676,31 @@ while($row = mysqli_fetch_assoc($result))
 <tr>
 
 <td>
-<?php echo $row['full_name']; ?>
+<?php echo htmlspecialchars($row['full_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td>
-<?php echo $row['enrollment_no']; ?>
+<?php echo htmlspecialchars($row['enrollment_no'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td>
-<?php echo $row['division']; ?>
+<?php echo htmlspecialchars($row['division'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td>
-<?php echo $row['roll_no']; ?>
+<?php echo htmlspecialchars($row['roll_no'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td>
-<?php echo $row['company_name']; ?>
+<?php echo htmlspecialchars($row['company_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td>
-<?php echo $row['company_contact']; ?>
+<?php echo htmlspecialchars($row['company_contact'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td>
-<?php echo $row['internship_role']; ?>
+<?php echo htmlspecialchars($row['internship_role'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td>
@@ -729,10 +736,11 @@ else
 
 if($row['offer_letter'] != "")
 {
-
+    $safeDivision = rawurlencode($row['division']);
+    $safeOfferLetter = rawurlencode($row['offer_letter']);
 ?>
 
-<a href="../uploads/offer_letters/<?php echo $row['division']; ?>/<?php echo $row['offer_letter']; ?>"
+<a href="../uploads/offer_letters/<?php echo $safeDivision; ?>/<?php echo $safeOfferLetter; ?>"
 target="_blank">
 
 View File
@@ -752,11 +760,11 @@ else
 </td>
 
 <td>
-<?php echo $row['mentor_name']; ?>
+<?php echo htmlspecialchars($row['mentor_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td>
-<?php echo $row['internship_type']; ?>
+<?php echo htmlspecialchars($row['internship_type'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
 </td>
 
 <td class="rejection-box">
@@ -769,7 +777,7 @@ if($row['rejection_reason'] == "")
 }
 else
 {
-    echo $row['rejection_reason'];
+    echo htmlspecialchars($row['rejection_reason'], ENT_QUOTES, 'UTF-8');
 }
 
 ?>
@@ -780,26 +788,23 @@ else
 
 <?php
 
+$rowId = (int)$row['id'];
+$qs = "search=" . urlencode($search) . "&status=" . urlencode($status_filter) . "&internship_type=" . urlencode($type_filter);
+
 if($row['status'] == "Pending")
 {
 ?>
 
 <div class="action-buttons">
 
-<a href="approve.php?id=<?php echo $row['id']; ?>
-&search=<?php echo urlencode($search); ?>
-&status=<?php echo urlencode($status_filter); ?>
-&internship_type=<?php echo urlencode($type_filter); ?>"
+<a href="approve.php?id=<?php echo $rowId; ?>&<?php echo $qs; ?>"
 class="btn btn-success btn-sm">
 
 Approve
 
 </a>
 
-<a href="reject_internship.php?id=<?php echo $row['id']; ?>
-&search=<?php echo urlencode($search); ?>
-&status=<?php echo urlencode($status_filter); ?>
-&internship_type=<?php echo urlencode($type_filter); ?>"
+<a href="reject_internship.php?id=<?php echo $rowId; ?>&<?php echo $qs; ?>"
 class="btn btn-danger btn-sm">
 Reject
 
@@ -816,10 +821,7 @@ else if($row['status'] == "Approved")
 
 <div class="text-center">
 
-<a href="undo_status.php?id=<?php echo $row['id']; ?>
-&search=<?php echo urlencode($search); ?>
-&status=<?php echo urlencode($status_filter); ?>
-&internship_type=<?php echo urlencode($type_filter); ?>"
+<a href="undo_status.php?id=<?php echo $rowId; ?>&<?php echo $qs; ?>"
 class="btn btn-warning btn-sm">
 
 Undo
@@ -837,10 +839,7 @@ else if($row['status'] == "Rejected")
 
 <div class="text-center">
 
-<a href="undo_status.php?id=<?php echo $row['id']; ?>
-&search=<?php echo urlencode($search); ?>
-&status=<?php echo urlencode($status_filter); ?>
-&internship_type=<?php echo urlencode($type_filter); ?>"
+<a href="undo_status.php?id=<?php echo $rowId; ?>&<?php echo $qs; ?>"
 class="btn btn-secondary btn-sm">
 
 Undo
@@ -871,6 +870,10 @@ Undo
 
 </div>
 
+</div>
+</div>
+
+</main>
 </div>
 
 <script>
@@ -905,6 +908,8 @@ window.onload = function()
 };
 
 </script>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 </html>

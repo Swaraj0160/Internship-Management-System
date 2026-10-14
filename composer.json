@@ -1,0 +1,4 @@
+{
+    "description": "No longer required. Excel export (lib/ExcelExporter.php) was rewritten to a native, dependency-free .xlsx writer using PHP's built-in ZipArchive class, after Composer install proved impractical on this Hostinger plan (no SSH access). This file is kept only so nothing breaks if it is still referenced anywhere; it declares no packages. If you previously uploaded a vendor/ folder for phpoffice/phpspreadsheet, it is safe to delete — it is no longer used by any file in this project.",
+    "require": {}
+}

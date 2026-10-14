@@ -6,11 +6,21 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'student')
     header("Location: ../login.php");
     exit();
 }
-$student_id = $_SESSION['user_id'];
-$query = "SELECT * FROM users
-          WHERE id='$student_id'";
-$result = mysqli_query($conn, $query);
-$user = mysqli_fetch_assoc($result);
+/* -----------------------------------------------------------------
+   REPLACE — sidebar propagation (Phase 2). Switched the SELECT to a
+   prepared statement for consistency with the rest of the project
+   (student_id already came only from the session, so this wasn't
+   directly exploitable, but every other page in the project now uses
+   prepared statements for this same pattern).
+   ----------------------------------------------------------------- */
+
+$student_id = (int)$_SESSION['user_id'];
+$stmt = $conn->prepare("SELECT * FROM users WHERE id=?");
+$stmt->bind_param("i", $student_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+
+$activePage = 'change_password.php';
 if(isset($_POST['change_password']))
 {
     $old_password = trim($_POST['old_password']);
@@ -99,6 +109,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 <style>
     :root{
     --bg:#f5f6fa;
@@ -123,30 +134,10 @@ body{
     background:var(--bg);
     font-family:'Inter',sans-serif;
     min-height:100vh;
-    padding:18px 40px;
 }
 
-/* Back Button */
-
-.page-header{
-    width:100%;
-    margin-bottom:15px;
-}
-
-.back-link{
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    color:var(--purple);
-    text-decoration:none;
-    font-weight:600;
-    font-size:15px;
-    transition:.3s;
-}
-
-.back-link:hover{
-    color:var(--purple-dark);
-    text-decoration:underline;
+.page-inner{
+    padding:18px 40px 40px;
 }
 
 /* Card */
@@ -325,11 +316,9 @@ body{
 </head>
 <body>
 
-<div class="page-header">
-    <a href="dashboard.php" class="back-link">
-        <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
-    </a>
-</div>
+<?php include __DIR__ . '/includes/sidebar_nav.php'; ?>
+
+<div class="page-inner">
 
 <div class="password-card">
     <div class="card-icon">
@@ -397,6 +386,10 @@ body{
         <i class="fa-solid fa-shield-halved"></i>
         <div>For your security, choose a password you don't use elsewhere and avoid sharing it with anyone.</div>
     </div>
+</div>
+
+</div>
+</main>
 </div>
 
 <script>
@@ -476,6 +469,8 @@ function checkMatch(){
     }
 }
 </script>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 </html>

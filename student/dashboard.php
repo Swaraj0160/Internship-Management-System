@@ -292,7 +292,6 @@ if (!$next_deadline_row && !empty($deadlines)) {
             --shadow:0 18px 50px rgba(73, 45, 150, .08);
             --shadow-soft:0 10px 25px rgba(73, 45, 150, .06);
             --radius:24px;
-            --sidebar-width:288px;
         }
 
         *{box-sizing:border-box}
@@ -325,188 +324,13 @@ if (!$next_deadline_row && !empty($deadlines)) {
         .fx-bg{ display:none !important; }
         .fx-orb{ display:none !important; }
         .particle{ display:none !important; }
-        .app{min-height:100vh;display:flex;position:relative;z-index:1}
-        .sidebar{
-    width:var(--sidebar-width);
-    min-height:100vh;
-    position:fixed;
-    inset:0 auto 0 0;
-
-    background:linear-gradient(
-        180deg,
-        #5b2d90 0%,
-        #4b2484 20%,
-        #3d1f73 45%,
-        #6d1b88 70%,
-        #5a1778 100%
-    );
-
-    color:#fff;
-    border-right:none;
-    box-shadow:0 10px 30px rgba(0,0,0,.18);
-
-    z-index:20;
-    display:flex;
-    flex-direction:column;
-    overflow:hidden;
-}
+        /* REPLACE — sidebar propagation (Phase 2): .app/.sidebar/.brand/
+           .profile-mini/.nav/.account-bottom/.main are now supplied by
+           includes/sidebar_head.php (shared across all student pages,
+           with real mobile off-canvas support this page never had). */
         .sidebar::after{ content:none; display:none; }
-        .brand{
-            padding:16px 16px 12px !important;
-            text-align:center;
-            border-bottom:1px solid rgba(255,255,255,.12);
-        }
-        .brand img{
-            width:108px !important;
-            max-width:100%;
-            height:auto;
-            object-fit:contain;
-            display:block;
-            margin:0 auto 8px !important;
-            box-shadow:0 16px 30px rgba(0,0,0,.16);
-            border-radius:16px;
-        }
-        .brand .title{
-            font-size:1.08rem;
-            font-weight:800;
-            line-height:1.08;
-        }
-        .brand .subtitle{
-            margin-top:7px;
-            font-size:.70rem;
-            letter-spacing:.34em;
-            color:rgba(255,255,255,.58);
-        }
-        .profile-mini{
-            display:flex;
-            gap:12px;
-            align-items:center;
-            padding:8px 16px 10px !important;
-            border-bottom:1px solid rgba(255,255,255,.12);
-            margin-bottom:0 !important;
-        }
-        .profile-mini .avatar,
-        .user-chip .avatar{
-            animation:none;
-        }
-        .profile-mini .avatar{
-    width:44px;
-    height:44px;
-    border-radius:50%;
-    overflow:hidden;
-    flex-shrink:0;
-    border:2px solid rgba(255,255,255,.25);
-    box-shadow:0 4px 12px rgba(0,0,0,.25);
-
-    display:flex;
-    align-items:center;
-    justify-content:center;
-
-    background:linear-gradient(135deg,#6f42ff,#8e5cff);
-    color:#fff;
-    font-size:18px;
-    font-weight:700;
-    text-transform:uppercase;
-}
-
-.profile-mini .avatar img{
-    width:100%;
-    height:100%;
-    object-fit:cover;
-    display:block;
-}
-        .profile-mini .meta{min-width:0}
-        .profile-mini .meta .name{
-            font-size:.96rem;
-            font-weight:700;
-            white-space:nowrap;
-            overflow:hidden;
-            text-overflow:ellipsis;
-        }
-        .profile-mini .meta .small{
-            color:rgba(255,255,255,.65);
-            font-size:.82rem;
-        }
-        .nav{
-            padding:8px 12px 10px !important;
-            gap:2px !important;
-            overflow:visible !important;
-            display:flex;
-            flex-direction:column;
-            flex:1 1 auto;
-            min-height:0;
-            scrollbar-width:none;
-            -ms-overflow-style:none;
-        }
-        .nav::-webkit-scrollbar,.sidebar::-webkit-scrollbar{width:0;height:0}
-        .nav-label{
-    color:rgba(255,255,255,.55);
-    font-size:.75rem;
-    letter-spacing:.18em;
-    font-weight:700;
-    text-transform:uppercase;
-}
-        .nav a{
-    position:relative;
-    display:flex;
-    align-items:center;
-    gap:12px;
-
-    color:#ffffff;
-
-    padding:11px 16px;
-    margin-bottom:4px;
-
-    border-radius:16px;
-
-    font-weight:600;
-    font-size:15px;
-
-    transition:all .30s ease;
-
-    overflow:hidden;
-}
         .nav a::before{ content:none; display:none; }
-        .nav a i{
-    width:20px;
-    text-align:center;
-    font-size:16px;
-    transition:.30s;
-}
-
-.nav a:hover i{
-    transform:scale(1.15);
-}
-        .nav a:hover{
-    background:linear-gradient(90deg,#ff5b5b,#ff8c3a);
-    color:#fff;
-    transform:translateX(5px);
-    box-shadow:0 10px 22px rgba(255,120,60,.35);
-}
-        .nav a.active{
-    background:linear-gradient(90deg,#ff5b6b,#ff8c3a);
-    color:#fff;
-    box-shadow:0 8px 18px rgba(255,107,107,.30);
-}
-        .nav a:hover i,
-        .nav a.active i{
-            transform:none;
-        }
-        .account-bottom{
-            margin-top:8px !important;
-            padding-top:6px !important;
-            border-top:1px solid rgba(255,255,255,.08);
-        }
         .sidebar-footer{display:none !important}
-
-        .main{
-            margin-left:var(--sidebar-width);
-            width:calc(100% - var(--sidebar-width));
-            background:#f5f6fa;
-            color:#1f2430;
-            position:relative;
-            z-index:1;
-        }
         .main::before{ content:none; display:none; }
         .topbar{
             position:sticky;
@@ -1192,8 +1016,6 @@ if (!$next_deadline_row && !empty($deadlines)) {
             }
         }
         @media (max-width: 1200px){
-            .sidebar{position:relative;width:100%;min-height:auto;height:auto}
-            .main{margin-left:0;width:100%}
             .topbar-inner{flex-direction:column;align-items:flex-start}
             .topbar-actions{width:100%;justify-content:space-between}
             .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1285,47 +1107,11 @@ if (!$next_deadline_row && !empty($deadlines)) {
 }
 
     </style>
+<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
 </head>
 <body>
-<div class="app">
-    <aside class="sidebar">
-        <div class="brand">
-            <img src="../assets/images/logo.png" alt="MIT-ADT University">
-            <div class="title">MIT-ADT University</div>
-            <div class="subtitle">PUNE, INDIA</div>
-        </div>
+<?php $activePage = 'dashboard.php'; include __DIR__ . '/includes/sidebar_nav.php'; ?>
 
-        <div class="profile-mini">
-           <div class="avatar">
-    <?php if($profile_image != "") { ?>
-        <img src="<?php echo $profile_image; ?>" alt="Profile">
-    <?php } else { ?>
-        <span><?php echo h($student_initial ?: 'S'); ?></span>
-    <?php } ?>
-</div>
-            <div class="meta">
-                <div class="name"><?php echo h($student_name); ?></div>
-                <div class="small"><?php echo h($student_division ?: 'Student'); ?></div>
-            </div>
-        </div>
-
-        <nav class="nav">
-            <div class="nav-label">Workspace</div>
-            <a href="dashboard.php" class="active"><i class="fa-solid fa-house"></i>Dashboard</a>
-            <a href="apply_internship.php"><i class="fa-solid fa-briefcase"></i>Apply Internship Form</a>
-            <a href="my_internships.php"><i class="fa-solid fa-list"></i>My Internships</a>
-            <a href="add_update.php"><i class="fa-solid fa-calendar-days"></i>Weekly Updates</a>
-            <a href="my_updates.php"><i class="fa-solid fa-clipboard-list"></i>My Weekly Work</a>
-            <a href="upload_report.php"><i class="fa-solid fa-file-arrow-up"></i>Final Internship Certificate</a>
-
-            <div class="nav-label account-bottom">Account</div>
-            <a href="profile.php"><i class="fa-solid fa-user"></i>Profile</a>
-            <a href="change_password.php"><i class="fa-solid fa-lock"></i>Change Password</a>
-            <a href="../logout.php"><i class="fa-solid fa-right-from-bracket"></i>Logout</a>
-        </nav>
-    </aside>
-
-    <main class="main">
         <div class="topbar">
             <div class="topbar-inner">
                 <div class="hero-title reveal visible">
@@ -1425,6 +1211,35 @@ if (!$next_deadline_row && !empty($deadlines)) {
         </div>
 
         <div class="page">
+
+            <div id="showcaseAnnouncement" class="notice-card reveal visible" style="display:none; background: linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%); border: 1px solid #c7d2fe; padding: 24px; border-radius: var(--radius); margin-bottom: 24px; position: relative; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(91, 61, 245, 0.05);">
+                <div style="position: absolute; right: -20px; top: -20px; opacity: 0.1; font-size: 8rem; color: #4f46e5; pointer-events: none;"><i class="fa-solid fa-medal"></i></div>
+                <button type="button" class="btn-close" id="closeShowcaseAnnouncement" aria-label="Close" style="position: absolute; top: 16px; right: 16px;"></button>
+                <div style="display: flex; gap: 20px; align-items: center; position: relative; z-index: 1;">
+                    <div style="flex-shrink: 0; width: 64px; height: 64px; border-radius: 16px; background: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-size: 2rem; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);">
+                        <i class="fa-solid fa-diagram-project"></i>
+                    </div>
+                    <div>
+                        <h2 style="font-size: 1.25rem; font-weight: 800; color: #1e1b4b; margin: 0 0 4px 0;">Your Internship Work Deserves to Be Showcased!</h2>
+                        <p style="color: #4338ca; font-size: 0.95rem; margin: 0 0 12px 0; max-width: 600px;">Have you built a project, developed a website, published a research paper, or completed any other work during your internship? Submit your work to the Internship Portal and make it part of your academic internship record.</p>
+                        <a href="my_showcase.php" class="action-btn" style="background: #4f46e5; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;"><i class="fa-solid fa-arrow-right"></i> Submit Your Work</a>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                if (!localStorage.getItem('showcase_announcement_dismissed')) {
+                    document.getElementById('showcaseAnnouncement').style.display = 'block';
+                }
+                
+                document.getElementById('closeShowcaseAnnouncement').addEventListener('click', function() {
+                    document.getElementById('showcaseAnnouncement').style.display = 'none';
+                    localStorage.setItem('showcase_announcement_dismissed', '1');
+                });
+            });
+            </script>
+
             <div class="stats-grid">
                 <div class="stat-card stat-purple reveal">
                     <div class="top">
@@ -2081,6 +1896,8 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 
 </div>
+
+<?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
 
 </body>
 </html>
