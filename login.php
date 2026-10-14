@@ -660,7 +660,7 @@ alert('Invalid Password');
             
             <div class="login-footer">
                 <p>&copy; <?php echo date('Y'); ?> MIT-ADT University. All Rights Reserved.</p>
-                <p>Designed and Developed by <span style="font-weight: 600; color: var(--text-main); opacity: 1;">Swaraj Ingale & Wardhan Darekar</span></p>
+                <p>Designed and Developed by <span style="font-weight: 600; color: var(--text-main); opacity: 1;">Team-Apex</span></p>
             </div>
         </div>
     </div>

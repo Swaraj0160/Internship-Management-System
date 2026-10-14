@@ -17,7 +17,8 @@
   <a href="#-visual-showcase">Screenshots</a> •
   <a href="#-quick-start--installation">Quick Start</a> •
   <a href="#-demo-credentials">Demo Access</a> •
-  <a href="#-security--privacy">Security</a>
+  <a href="#-security--privacy">Security</a> •
+  <a href="#-project-team--developers">Team</a>
 </p>
 
 ---
@@ -288,7 +289,7 @@ The database schema includes pre-seeded, synthetic accounts for immediate evalua
 
 Experience InternHub live without local setup via our verified cloud tunnel:
 
-🔗 **[Launch InternHub Live Demo](https://86195cb4a85d55.lhr.life/login.php)**
+🔗 **[Launch InternHub Live Demo](https://07e98cca50d8fc.lhr.life/login.php)**
 
 > **Note**: The live demo instance runs in a sandboxed demonstration environment seeded exclusively with synthetic student identities.
 
@@ -348,8 +349,9 @@ Internship-Management-System/
 │   └── RiskAnalyzer.php             # Algorithmic submission velocity scoring
 ├── database/                        # Database Assets
 │   └── schema.sql                   # Pristine DDL schema & synthetic seed records
-├── docs/                            # Project Documentation & Screenshots
-│   └── screenshots/                 # High-resolution verified interface captures
+├── docs/                            # Project Documentation, Team & Screenshots
+│   ├── screenshots/                 # High-resolution verified interface captures
+│   └── team/                        # Project developer & contributor portraits
 ├── assets/                          # Static Frontend Assets (CSS, JS, Branding)
 ├── uploads/                         # Secure Local File Storage (.gitkeep preserved)
 ├── config.example.php               # Sanitized template configuration file
@@ -357,6 +359,23 @@ Internship-Management-System/
 ├── logout.php                       # Session invalidation & teardown
 └── .gitignore                       # Strict production exclusion rules
 ```
+
+---
+
+## 👥 Project Team & Developers
+
+**InternHub** is conceptualized, designed, and engineered by **Team-Apex**:
+
+<div align="center">
+
+| Developer & Lead | Co-Developer & Contributor |
+| :---: | :---: |
+| <img src="docs/team/swaraj_ingale.png" alt="Swaraj Ingale" width="160" height="160" style="border-radius: 50%; object-fit: cover;" /><br/>### **Swaraj Ingale**<br/>**Team-Apex** | <img src="docs/team/wardhan_darekar.jpeg" alt="Wardhan Darekar" width="160" height="160" style="border-radius: 50%; object-fit: cover;" /><br/>### **Wardhan Darekar**<br/>**Team-Apex** |
+| [![GitHub](https://img.shields.io/badge/GitHub-Swaraj0160-181717?style=for-the-badge&logo=github)](https://github.com/Swaraj0160)<br/>Architecture, Core Backend Services, Dashboards & Evaluation Logic | Co-development, Frontend layout & Database coordination |
+
+</div>
+
+> **Official Portal Credit**: The login interface explicitly displays: **Designed and Developed by Team-Apex**.
 
 ---
 
