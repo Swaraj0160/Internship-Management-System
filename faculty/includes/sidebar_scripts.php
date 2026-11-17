@@ -1,85 +1,72 @@
-<?php
-/* NEW FILE — shared sidebar mobile-toggle JS for all faculty pages.
-   Same pattern as admin/includes/sidebar_scripts.php. Include right
-   before </body>, after the including page has closed
-   "</main></div>". */
-?>
+    </main>
+</div>
+
+<!-- Faculty Portal Shared Scripts -->
 <script>
-(function () {
-    function setupMobileSidebar() {
-        const sidebar = document.getElementById('fsbSidebar');
-        const backdrop = document.getElementById('fsbSidebarBackdrop');
-        const toggle = document.getElementById('fsbMobileMenuToggle');
-        if (!sidebar || !backdrop || !toggle) return;
-        function openSidebar() {
-            sidebar.classList.add('open');
-            backdrop.classList.add('show');
-            document.body.style.overflow = 'hidden';
-        }
-        function closeSidebar() {
-            sidebar.classList.remove('open');
-            backdrop.classList.remove('show');
-            document.body.style.overflow = '';
-        }
-        toggle.addEventListener('click', () => {
-            if (sidebar.classList.contains('open')) {
+(function() {
+    // Mobile Sidebar Drawer
+    const sidebar = document.getElementById('facultySidebar');
+    const backdrop = document.getElementById('facultySidebarBackdrop');
+    const toggle = document.getElementById('facultyMenuToggle');
+
+    function openSidebar() {
+        if (sidebar) sidebar.classList.add('open');
+        if (backdrop) backdrop.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeSidebar() {
+        if (sidebar) sidebar.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    if (toggle) {
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (sidebar && sidebar.classList.contains('open')) {
                 closeSidebar();
             } else {
                 openSidebar();
             }
         });
+    }
+
+    if (backdrop) {
         backdrop.addEventListener('click', closeSidebar);
-        sidebar.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', () => {
-                if (window.innerWidth <= 992) closeSidebar();
-            });
-        });
-        window.addEventListener('resize', () => {
-            if (window.innerWidth > 992) closeSidebar();
-        });
     }
-    /* NEW (post-implementation audit — exact sidebar requirement):
-       functional profile dropdown, same pattern as admin. */
-    function setupProfileDropdown() {
-        const trigger = document.getElementById('fsbProfileTrigger');
-        const dropdown = document.getElementById('fsbProfileDropdown');
-        if (!trigger || !dropdown) return;
 
-        function closeDropdown() {
-            dropdown.classList.remove('open');
-            trigger.setAttribute('aria-expanded', 'false');
-        }
-        function openDropdown() {
-            dropdown.classList.add('open');
-            trigger.setAttribute('aria-expanded', 'true');
-        }
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 992) closeSidebar();
+    });
 
-        trigger.addEventListener('click', function (e) {
+    // Topbar Profile Popover
+    const profileBtn = document.getElementById('topbarUserDropdownTrigger');
+    const profilePopover = document.getElementById('topbarUserDropdownPopover');
+
+    if (profileBtn && profilePopover) {
+        profileBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (dropdown.classList.contains('open')) {
-                closeDropdown();
-            } else {
-                openDropdown();
-            }
+            profilePopover.classList.toggle('open');
         });
 
-        document.addEventListener('click', function (e) {
-            if (!dropdown.contains(e.target) && e.target !== trigger) {
-                closeDropdown();
+        document.addEventListener('click', (e) => {
+            if (!profilePopover.contains(e.target) && e.target !== profileBtn) {
+                profilePopover.classList.remove('open');
             }
-        });
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') closeDropdown();
         });
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupMobileSidebar);
-        document.addEventListener('DOMContentLoaded', setupProfileDropdown);
-    } else {
-        setupMobileSidebar();
-        setupProfileDropdown();
-    }
+    // Ctrl + K Global Search Shortcut
+    window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            const searchInput = document.getElementById('globalSearchInput');
+            if (searchInput) {
+                searchInput.focus();
+                searchInput.select();
+            }
+        }
+    });
 })();
 </script>

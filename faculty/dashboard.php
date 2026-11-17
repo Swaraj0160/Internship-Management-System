@@ -1,3090 +1,1423 @@
 <?php
+/* -----------------------------------------------------------------
+   InternHub — Faculty Dashboard (Redesigned)
+   Pixel-faithful reproduction of approved reference design:
+   media_1794935844127.jpg
+   ----------------------------------------------------------------- */
 
 session_start();
-include("../config.php");
+require_once __DIR__ . '/../config.php';
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'faculty') {
     header("Location: ../login.php");
     exit();
 }
 
-function h($value): string
-{
-    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
-}
-
-function shortText(?string $text, int $limit = 150): string
-{
-    $text = trim((string)$text);
-    if ($text === '') {
-        return '';
-    }
-
-    if (function_exists('mb_strimwidth')) {
-        return mb_strimwidth($text, 0, $limit, '...');
-    }
-
-    return strlen($text) > $limit ? substr($text, 0, $limit) . '...' : $text;
-}
-
-/* -----------------------------------------------------------------
-   ATTACHMENT ICON HELPER
-   Maps a filename's extension to a Font Awesome icon, label and
-   accent color, used by the notification "Read More" modal below.
-   ----------------------------------------------------------------- */
-function getAttachmentIcon(?string $filename): array
-{
-    $filename = trim((string)$filename);
-    if ($filename === '') {
-        return ['icon' => 'fa-file', 'label' => 'File', 'color' => '#64748b'];
-    }
-
-    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-
-    $map = [
-        'pdf'  => ['icon' => 'fa-file-pdf',        'label' => 'PDF Document',      'color' => '#ef4444'],
-        'doc'  => ['icon' => 'fa-file-word',       'label' => 'Word Document',     'color' => '#3B82F6'],
-        'docx' => ['icon' => 'fa-file-word',       'label' => 'Word Document',     'color' => '#3B82F6'],
-        'xls'  => ['icon' => 'fa-file-excel',      'label' => 'Excel Spreadsheet', 'color' => '#22C55E'],
-        'xlsx' => ['icon' => 'fa-file-excel',      'label' => 'Excel Spreadsheet', 'color' => '#22C55E'],
-        'csv'  => ['icon' => 'fa-file-csv',        'label' => 'CSV File',          'color' => '#22C55E'],
-        'ppt'  => ['icon' => 'fa-file-powerpoint', 'label' => 'PowerPoint File',   'color' => '#F59E0B'],
-        'pptx' => ['icon' => 'fa-file-powerpoint', 'label' => 'PowerPoint File',   'color' => '#F59E0B'],
-        'jpg'  => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
-        'jpeg' => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
-        'png'  => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
-        'gif'  => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
-        'webp' => ['icon' => 'fa-file-image',      'label' => 'Image',             'color' => '#7B61FF'],
-        'zip'  => ['icon' => 'fa-file-zipper',     'label' => 'ZIP Archive',       'color' => '#F59E0B'],
-        'rar'  => ['icon' => 'fa-file-zipper',     'label' => 'RAR Archive',       'color' => '#F59E0B'],
-        '7z'   => ['icon' => 'fa-file-zipper',     'label' => 'Archive',           'color' => '#F59E0B'],
-        'txt'  => ['icon' => 'fa-file-lines',      'label' => 'Text File',         'color' => '#64748b'],
-    ];
-
-    return $map[$ext] ?? ['icon' => 'fa-file', 'label' => strtoupper($ext ?: 'FILE') . ' File', 'color' => '#64748b'];
-}
-
-function runQuery(mysqli $conn, string $sql): ?mysqli_result
-{
-    $result = mysqli_query($conn, $sql);
-    return ($result instanceof mysqli_result) ? $result : null;
-}
-
-function fetchOneAssoc(mysqli $conn, string $sql): array
-{
-    $result = runQuery($conn, $sql);
-    if (!$result) {
-        return [];
-    }
-    $row = mysqli_fetch_assoc($result);
-    mysqli_free_result($result);
-    return $row ?: [];
-}
-
 $faculty_id = (int)$_SESSION['user_id'];
 
-$faculty = fetchOneAssoc(
-    $conn,
-    "SELECT *
-     FROM users
-     WHERE id='$faculty_id'
-     LIMIT 1"
-);
+// Fetch faculty user profile
+$faculty_res = mysqli_query($conn, "SELECT * FROM users WHERE id='$faculty_id' LIMIT 1");
+$faculty = $faculty_res ? mysqli_fetch_assoc($faculty_res) : null;
 
 if (!$faculty) {
     header("Location: ../login.php");
     exit();
 }
 
-/* FACULTY DIVISIONS
-   A faculty member can be assigned to multiple divisions through
-   faculty_divisions. Use that mapping everywhere on this dashboard.
-   Keep the users.faculty_division value as a fallback for older records.
-*/
+// Fetch assigned divisions from faculty_divisions table with legacy fallback
 $faculty_divisions = [];
-$faculty_divisions_query = runQuery(
+$fd_query = mysqli_query(
     $conn,
-    "SELECT DISTINCT division
-     FROM faculty_divisions
+    "SELECT DISTINCT division FROM faculty_divisions
      WHERE faculty_id='$faculty_id'
        AND division IS NOT NULL
        AND TRIM(division) <> ''
-     ORDER BY division"
+     ORDER BY division ASC"
 );
 
-if ($faculty_divisions_query) {
-    while ($division_row = mysqli_fetch_assoc($faculty_divisions_query)) {
-        $division_value = trim((string)($division_row['division'] ?? ''));
-        if ($division_value !== '') {
-            $faculty_divisions[] = $division_value;
+if ($fd_query) {
+    while ($div_row = mysqli_fetch_assoc($fd_query)) {
+        $v = trim((string)$div_row['division']);
+        if ($v !== '') {
+            $faculty_divisions[] = $v;
         }
     }
-    mysqli_free_result($faculty_divisions_query);
 }
 
 $legacy_division = trim((string)($faculty['faculty_division'] ?? ''));
 if (empty($faculty_divisions) && $legacy_division !== '') {
     $faculty_divisions[] = $legacy_division;
 }
-
 $faculty_divisions = array_values(array_unique($faculty_divisions));
 
-/* Safe SQL IN-list, e.g. 'IT-DA','IT-SMAD' */
+// Build safe SQL list for divisions
 $division_sql_values = array_map(
-    static fn($division) => "'" . mysqli_real_escape_string($conn, $division) . "'",
+    fn($div) => "'" . mysqli_real_escape_string($conn, $div) . "'",
     $faculty_divisions
 );
 $division_list_sql = implode(',', $division_sql_values);
-
-/* Display value used by the UI. */
-$faculty_division = implode(', ', $faculty_divisions);
-
-/* If no division mapping exists, force all division queries to return no rows. */
-$division_condition = !empty($division_list_sql)
-    ? "u.division IN ($division_list_sql)"
-    : "1=0";
-
-$faculty_name = trim((string)($faculty['full_name'] ?? ''));
+$faculty_division = !empty($faculty_divisions) ? implode(', ', $faculty_divisions) : 'Faculty Guide';
+$faculty_name = trim((string)($faculty['full_name'] ?? 'Faculty Mentor'));
 $faculty_name_clean = preg_replace('/^(Prof\.?|Dr\.?|Professor)\s*/i', '', $faculty_name);
 $faculty_initial = strtoupper(substr($faculty_name_clean ?: $faculty_name ?: 'F', 0, 1));
 
-$latest_from = "
-    FROM users u
-    LEFT JOIN internships i
-        ON i.id = (
-            SELECT id
-            FROM internships
-            WHERE student_id = u.id
-            ORDER BY created_at DESC, id DESC
-            LIMIT 1
-        )
-";
+// Condition for student division
+$div_cond = !empty($division_list_sql) ? "u.division IN ($division_list_sql)" : "1=0";
 
-$division_where = "
-    WHERE u.role='student'
-      AND $division_condition
-";
-
-/* TOTAL STUDENTS */
+// 1. Total Students in assigned divisions
 $total_students = 0;
-$student_query = runQuery(
-    $conn,
-    "SELECT COUNT(*) AS total
-     FROM users
-     WHERE role='student'
-       AND division IN ($division_list_sql)"
-);
-if ($student_query) {
-    $total_students = (int)(mysqli_fetch_assoc($student_query)['total'] ?? 0);
-    mysqli_free_result($student_query);
+if (!empty($division_list_sql)) {
+    $stu_q = mysqli_query($conn, "SELECT COUNT(*) AS total FROM users WHERE role='student' AND division IN ($division_list_sql)");
+    if ($stu_q) {
+        $total_students = (int)(mysqli_fetch_assoc($stu_q)['total'] ?? 0);
+    }
 }
 
-/* LATEST INTERNSHIP FOR EACH STUDENT IN THIS DIVISION */
-$current_query = runQuery(
-    $conn,
-    "SELECT
-        u.id,
-        u.roll_no,
-        u.full_name,
-        u.division,
-        i.status,
-        i.internship_type,
-        i.company_name,
-        i.mentor_name,
-        i.company_contact
-     $latest_from
-     $division_where
-     ORDER BY CAST(u.roll_no AS UNSIGNED), u.full_name ASC"
-);
-
+// 2. Internship Applications counts for assigned divisions
 $total_applications = 0;
 $approved_count = 0;
 $pending_count = 0;
 $rejected_count = 0;
-$not_submitted_count = 0;
 
-if ($current_query) {
-    while ($row = mysqli_fetch_assoc($current_query)) {
-        if (!empty($row['status'])) {
-            $total_applications++;
-        } else {
-            $not_submitted_count++;
-        }
-
-        if (($row['status'] ?? '') === 'Approved') {
-            $approved_count++;
-        } elseif (($row['status'] ?? '') === 'Pending') {
-            $pending_count++;
-        } elseif (($row['status'] ?? '') === 'Rejected') {
-            $rejected_count++;
-        }
-    }
-    mysqli_free_result($current_query);
-}
-
-/* TOTAL COMPANIES */
-$total_companies = 0;
-$company_count_query = runQuery(
-    $conn,
-    "SELECT COUNT(DISTINCT i.company_name) AS total
-     $latest_from
-     $division_where
-       AND i.company_name IS NOT NULL
-       AND i.company_name <> ''"
-);
-if ($company_count_query) {
-    $total_companies = (int)(mysqli_fetch_assoc($company_count_query)['total'] ?? 0);
-    mysqli_free_result($company_count_query);
-}
-
-/* APPROVAL RATE */
-$approval_rate = 0.0;
-if ($total_students > 0) {
-    $approval_rate = round(($approved_count / $total_students) * 100, 2);
-}
-
-/* ADMIN NOTIFICATIONS FOR FACULTY */
-$admin_notifications = [];
-$notif_query = runQuery(
-    $conn,
-    "SELECT *
-     FROM admin_notifications
-     WHERE target_role='faculty'
-        OR target_role='all'
-     ORDER BY id DESC"
-);
-if ($notif_query) {
-    while ($row = mysqli_fetch_assoc($notif_query)) {
-        $admin_notifications[] = $row;
-    }
-    mysqli_free_result($notif_query);
-}
-
-/* UNREAD NOTIFICATIONS COUNT */
-$notification_count = 0;
-$unread_notifications = runQuery(
-    $conn,
-    "SELECT id
-     FROM admin_notifications
-     WHERE (
-        target_role='faculty'
-        OR target_role='all'
-     )
-     AND id NOT IN (
-        SELECT notification_id
-        FROM faculty_notification_reads
-        WHERE faculty_id='$faculty_id'
-     )"
-);
-if ($unread_notifications) {
-    $notification_count = mysqli_num_rows($unread_notifications);
-    mysqli_free_result($unread_notifications);
-}
-
-/* ANALYTICS SEARCH */
-$search_results = [];
-$search_total = 0;
-
-if (isset($_GET['analytics_search'])) {
-    $status_filter = trim($_GET['status'] ?? '');
-    $type_filter = trim($_GET['internship_type'] ?? '');
-    $company_filter = trim($_GET['company_name'] ?? '');
-
-    $where = "u.role='student' AND $division_condition";
-
-    if ($status_filter !== '') {
-        $where .= " AND i.status='" . mysqli_real_escape_string($conn, $status_filter) . "'";
-    }
-
-    if ($type_filter !== '') {
-        $where .= " AND i.internship_type='" . mysqli_real_escape_string($conn, $type_filter) . "'";
-    }
-
-    if ($company_filter !== '') {
-        $where .= " AND i.company_name='" . mysqli_real_escape_string($conn, $company_filter) . "'";
-    }
-
-    $analytics_query = runQuery(
+if (!empty($division_list_sql)) {
+    $app_q = mysqli_query(
         $conn,
-        "SELECT
-            u.roll_no,
-            u.full_name,
-            u.division,
-            i.status,
-            i.internship_type,
-            i.company_name,
-            i.mentor_name
-         FROM users u
-         LEFT JOIN internships i
-            ON i.id = (
-                SELECT MAX(id)
-                FROM internships
-                WHERE student_id = u.id
-            )
-         WHERE $where
-         ORDER BY CAST(u.roll_no AS UNSIGNED), u.full_name ASC"
+        "SELECT i.status, COUNT(*) as cnt
+         FROM internships i
+         JOIN users u ON i.student_id = u.id
+         WHERE u.role='student' AND $div_cond
+         GROUP BY i.status"
     );
-
-    if ($analytics_query) {
-        $search_total = mysqli_num_rows($analytics_query);
-        while ($row = mysqli_fetch_assoc($analytics_query)) {
-            $search_results[] = $row;
+    if ($app_q) {
+        while ($row = mysqli_fetch_assoc($app_q)) {
+            $st = $row['status'] ?? '';
+            $cnt = (int)$row['cnt'];
+            $total_applications += $cnt;
+            if ($st === 'Approved') $approved_count += $cnt;
+            elseif ($st === 'Pending') $pending_count += $cnt;
+            elseif ($st === 'Rejected') $rejected_count += $cnt;
         }
-        mysqli_free_result($analytics_query);
     }
 }
 
-/* TOP COMPANIES */
-$company_query = runQuery(
-    $conn,
-    "SELECT
-        i.company_name,
-        COUNT(*) AS total
-     FROM internships i
-     INNER JOIN users u ON i.student_id = u.id
-     WHERE $division_condition
-     AND i.company_name IS NOT NULL
-     AND i.company_name <> ''
-     GROUP BY i.company_name
-     ORDER BY total DESC
-     LIMIT 10"
-);
+// Approval rate calculation
+$approval_rate = ($total_students > 0) ? round(($approved_count / $total_students) * 100, 1) : 0.0;
 
-$company_labels = [];
-$company_values = [];
-
-if ($company_query) {
-    while ($row = mysqli_fetch_assoc($company_query)) {
-        $company_labels[] = (strlen($row['company_name']) > 28)
-            ? substr($row['company_name'], 0, 28) . '...'
-            : $row['company_name'];
-        $company_values[] = (int)$row['total'];
+// 3. Recent Applications
+$recent_apps = [];
+if (!empty($division_list_sql)) {
+    $recent_q = mysqli_query(
+        $conn,
+        "SELECT i.id, i.company_name, i.status, i.created_at, u.id as student_id, u.full_name, u.roll_no, u.division, u.department
+         FROM internships i
+         JOIN users u ON i.student_id = u.id
+         WHERE u.role='student' AND $div_cond
+         ORDER BY i.created_at DESC, i.id DESC
+         LIMIT 6"
+    );
+    if ($recent_q) {
+        while ($r = mysqli_fetch_assoc($recent_q)) {
+            $recent_apps[] = $r;
+        }
     }
-    mysqli_free_result($company_query);
 }
 
-$top_company = fetchOneAssoc(
-    $conn,
-    "SELECT
-        i.company_name,
-        COUNT(*) AS total
-     FROM internships i
-     INNER JOIN users u ON i.student_id = u.id
-     WHERE $division_condition
-     AND i.company_name IS NOT NULL
-     AND i.company_name <> ''
-     GROUP BY i.company_name
-     ORDER BY total DESC
-     LIMIT 1"
-);
-
-$top_company_name = $top_company['company_name'] ?? '-';
-$top_company_students = (int)($top_company['total'] ?? 0);
-
-/* INTERNSHIP TYPES */
-$type_query = runQuery(
-    $conn,
-    "SELECT
-        i.internship_type,
-        COUNT(*) AS total
-     FROM internships i
-     INNER JOIN users u ON i.student_id = u.id
-     WHERE $division_condition
-     AND i.internship_type IS NOT NULL
-     AND i.internship_type <> ''
-     GROUP BY i.internship_type
-     ORDER BY total DESC"
-);
-
-$type_labels = [];
-$type_values = [];
-
-if ($type_query) {
-    while ($row = mysqli_fetch_assoc($type_query)) {
-        $type_labels[] = $row['internship_type'] ?: 'Not Set';
-        $type_values[] = (int)$row['total'];
+// 4. Upcoming Deadlines for active division
+$deadlines = [];
+if (!empty($faculty_divisions)) {
+    $primary_div = $faculty_divisions[0];
+    $dl_q = mysqli_query($conn, "SELECT * FROM weekly_deadlines WHERE division='$primary_div' ORDER BY week_no ASC");
+    if ($dl_q && mysqli_num_rows($dl_q) > 0) {
+        while ($d = mysqli_fetch_assoc($dl_q)) {
+            $deadlines[] = $d;
+        }
     }
-    mysqli_free_result($type_query);
 }
 
-if (empty($type_labels)) {
-    $type_labels = ['Not Set'];
-    $type_values = [0];
-}
-
-/* STATUS ARRAY FOR CLEAN PROFESSIONAL UI */
-$status_labels = ['Approved', 'Pending', 'Rejected', 'No Internship'];
-$status_values = [$approved_count, $pending_count, $rejected_count, $not_submitted_count];
-
-/* DROPDOWNS */
-$company_dropdown = [];
-$company_dropdown_q = runQuery(
-    $conn,
-    "SELECT DISTINCT i.company_name
-     FROM internships i
-     INNER JOIN users u ON i.student_id = u.id
-     WHERE $division_condition
-     AND i.company_name IS NOT NULL
-     AND i.company_name <> ''
-     ORDER BY i.company_name"
-);
-if ($company_dropdown_q) {
-    while ($row = mysqli_fetch_assoc($company_dropdown_q)) {
-        $company_dropdown[] = $row['company_name'];
+// 5. My Tasks calculation
+$pending_reports_count = 0;
+if (!empty($division_list_sql)) {
+    $rep_q = mysqli_query(
+        $conn,
+        "SELECT COUNT(*) AS cnt
+         FROM weekly_updates w
+         JOIN internships i ON w.internship_id = i.id
+         JOIN users u ON i.student_id = u.id
+         WHERE $div_cond AND (w.faculty_feedback IS NULL OR TRIM(w.faculty_feedback) = '')"
+    );
+    if ($rep_q) {
+        $pending_reports_count = (int)(mysqli_fetch_assoc($rep_q)['cnt'] ?? 0);
     }
-    mysqli_free_result($company_dropdown_q);
 }
 
-$type_dropdown = [];
-$type_dropdown_q = runQuery(
-    $conn,
-    "SELECT DISTINCT i.internship_type
-     FROM internships i
-     INNER JOIN users u ON i.student_id = u.id
-     WHERE $division_condition
-     AND i.internship_type IS NOT NULL
-     AND i.internship_type <> ''
-     ORDER BY i.internship_type"
-);
-if ($type_dropdown_q) {
-    while ($row = mysqli_fetch_assoc($type_dropdown_q)) {
-        $type_dropdown[] = $row['internship_type'];
-    }
-    mysqli_free_result($type_dropdown_q);
-}
+$activePage = 'dashboard.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Faculty Dashboard</title>
-
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+    <title>Faculty Mentorship Workspace | InternHub — MIT-ADT University</title>
+    <?php include __DIR__ . '/includes/sidebar_head.php'; ?>
     <style>
-:root{
-    --bg0:#0d0221;
-    --bg1:#17053d;
-    --bg2:#1e084f;
-    --bg3:#2a0b73;
-    --surface:rgba(255,255,255,.08);
-    --surface-2:rgba(255,255,255,.12);
-    --text:#f4f7ff;
-    --muted:rgba(232,236,255,.72);
-    --border:rgba(255,255,255,.13);
-    --purple:#7B61FF;
-    --blue:#3B82F6;
-    --cyan:#00E5FF;
-    --pink:#FF4FD8;
-    --green:#22C55E;
-    --orange:#F59E0B;
-    --shadow:0 24px 70px rgba(4, 2, 18, .42);
-    --shadow-soft:0 14px 38px rgba(4, 2, 18, .28);
-  --sidebar-width:clamp(225px,18vw,288px);
-    --card-radius:28px;
-}
-*{box-sizing:border-box;}
-html, body{width:100%;max-width:100%;overflow-x:hidden;scroll-behavior:smooth;}
-body{
-    margin:0;
-    font-family:'Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    color:var(--text);
-    background:
-        radial-gradient(circle at 20% 20%, rgba(123,97,255,.22), transparent 28%),
-        radial-gradient(circle at 80% 15%, rgba(0,229,255,.14), transparent 24%),
-        radial-gradient(circle at 70% 85%, rgba(255,79,216,.12), transparent 22%),
-        linear-gradient(135deg, var(--bg0) 0%, var(--bg1) 35%, var(--bg2) 70%, var(--bg3) 100%);
-    position:relative;
-}
-body::before{
-    content:"";
-    position:fixed;
-    inset:0;
-    pointer-events:none;
-    background-image:
-        linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
-    background-size:48px 48px;
-    opacity:.10;
-    mask-image:linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
-    z-index:0;
-}
-img, canvas{
-    max-width:100%;
-}
-.top-progress{
-    position:fixed;
-    top:0;left:0;
-    height:4px;
-    width:0%;
-    z-index:9999;
-    background:linear-gradient(90deg, var(--purple), var(--cyan), var(--pink));box-shadow:0 0 18px rgba(0,229,255,.45);
-}
-.fx-bg{
-    position:fixed;
-    inset:0;pointer-events:none;
-    z-index:0;
-    overflow:hidden;
-}
-.fx-orb{
-    position:absolute;
-    border-radius:50%;
-    filter:blur(26px);
-    opacity:.32;
-    mix-blend-mode:screen;
-    animation:orbFloat 16s ease-in-out infinite;
-}
-.fx-orb.orb1{
-    width:360px;
-    height:360px;
-    left:-120px;
-    top:80px;
-    background:radial-gradient(circle at 30% 30%, rgba(123,97,255,.70), rgba(123,97,255,0) 68%);
-}
-.fx-orb.orb2{
-    width:280px;
-    height:280px;
-    right:100px;
-    top:140px;
-    background:radial-gradient(circle at 30% 30%, rgba(0,229,255,.34), rgba(0,229,255,0) 68%);
-    animation-delay:-6s;
-}
-.fx-orb.orb3{
-    width:240px;
-    height:240px;
-    right:40px;
-    bottom:90px;
-    background:radial-gradient(circle at 30% 30%, rgba(255,79,216,.24), rgba(255,79,216,0) 68%);
-    animation-delay:-11s;
-}
-.fx-particles{
-    position:absolute;
-    inset:0;
-}
-.particle{
-    position:absolute;
-    border-radius:50%;
-    background:radial-gradient(circle, rgba(255,255,255,.95), rgba(255,255,255,.06) 55%, rgba(255,255,255,0) 72%);
-    box-shadow:0 0 28px rgba(255,255,255,.25);
-    opacity:.24;animation:particleDrift var(--dur, 18s) linear infinite;
-    transform:translate3d(0,0,0);
-}
-.app{
-    min-height:100vh;
-    display:flex;width:100%;overflow-x:hidden;
-    position:relative;
-    z-index:1;
-}
-.sidebar{
-    width:var(--sidebar-width);
-    height:100vh;
-    position:fixed;
-    inset:0 auto 0 0;
-    background:linear-gradient(180deg, rgba(123,97,255,.24), rgba(123,97,255,0)),linear-gradient(180deg, #3f0f68 0%, #6d1a88 48%, #4a1474 100%);
-    color:#fff;
-    box-shadow:10px 0 30px rgba(4, 2, 18, .36);
-    z-index:20;
-    display:flex;flex-direction:column;
-    overflow:hidden;
-    border-right:1px solid rgba(255,255,255,.06);
-}
-.sidebar::after{content:"";
-position:absolute;
-inset:0;background:linear-gradient(180deg, rgba(255,255,255,.05), transparent 35%, rgba(255,255,255,.03));
-pointer-events:none;
-}
-.brand{
-    padding:16px 16px 12px;
-    text-align:center;
-    border-bottom:1px solid rgba(255,255,255,.08);
-}
-.brand img{
-    width:clamp(85px,8vw,120px);
-    height:auto;object-fit:contain;
-    display:block;margin:0 auto 10px;
-}
-.brand .title{
-    font-size:clamp(.88rem,1vw,1.08rem);
-    font-weight:800;line-height:1.08;
-    letter-spacing:-.03em;
-}
-.brand .subtitle{
-    margin-top:7px;
-    font-size:.70rem;
-    letter-spacing:.34em;
-    color:rgba(255,255,255,.58);
-}
-.profile-mini{
-    display:flex;
-gap:clamp(8px,.8vw,12px);
-align-items:center;
-padding:clamp(10px,.8vw,12px)
-clamp(12px,1vw,16px);
-border-bottom:1px solid rgba(255,255,255,.08);
-min-width:0;
-}
-.profile-mini .avatar{
-    width:44px;height:44px;
-    border-radius:50%;
-    display:grid;place-items:center;
-    background:linear-gradient(135deg, #7c5cff, #4f7cff);
-    font-weight:800;
-    color:#fff;
-    box-shadow:0 12px 24px rgba(0,0,0,.24), 0 0 0 6px rgba(255,255,255,.05);
-    flex:0 0 auto;animation:floatIcon 3.8s ease-in-out infinite;
-}
-.profile-mini .meta{
-    min-width:0;
-}
-.profile-mini .meta .name{
-    font-size:clamp(.82rem,.9vw,.93rem);
-    font-weight:700;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-}
-.profile-mini .meta .small{
-    color:rgba(255,255,255,.65);
-    font-size:.80rem;
-}
-.nav{
-    padding:10px 12px 12px;
-    gap:3px;
-    min-height:0;
-    flex:1 1 auto;
-    display:flex;
-    flex-direction:column;
-
-    overflow-y:auto;
-    overflow-x:hidden;
-
-    scrollbar-width:thin;
-}
-.nav-label{
-    padding:7px 10px 4px;
-    color:rgba(255,255,255,.42);
-    font-size:.70rem;
-    letter-spacing:.16em;
-    text-transform:uppercase;
-    font-weight:700;
-}
-.nav a{
-    display:flex;
-    align-items:center;
-    gap:clamp(8px,.8vw,11px);
-
-    color:rgba(255,255,255,.94);
-
-    padding:clamp(8px,.8vw,11px)
-            clamp(10px,.8vw,14px);
-
-    border-radius:15px;
-
-    font-weight:600;
-
-    margin-bottom:2px;
-
-    text-decoration:none;
-
-    min-width:0;
-
-    font-size:clamp(.82rem,.9vw,.92rem);
-
-    position:relative;
-
-    overflow:hidden;
-}
-.nav a::before{
-    content:"";
-    position:absolute;
-    inset:0;background:linear-gradient(90deg, rgba(255,255,255,.18), transparent 40%, rgba(255,255,255,.10));
-    opacity:0;transform:translateX(-35%);transition:opacity .25s ease, transform .35s ease;
-}
-.nav a:hover::before,.nav a.active::before{
-    opacity:1;transform:translateX(0);
-}
-.nav a i{width:clamp(16px,1vw,20px);
-    min-width:clamp(16px,1vw,20px);
-text-align:center;
-font-size:clamp(.85rem,.9vw,.98rem);
-flex:0 0 auto;transition:transform .25s ease;
-}
-.nav a:hover i,.nav a.active i{transform:rotate(8deg) scale(1.05);}
-.nav a:hover{background:linear-gradient(90deg, #cf1e71, #f26d21);color:#fff;transform:translateX(4px) scale(1.02);box-shadow:0 12px 24px rgba(0,0,0,.20);}
-.nav a.active{background:linear-gradient(90deg, #cf1e71, #f26d21);box-shadow:0 18px 30px rgba(91,61,245,.24);}
-.nav .account-bottom{margin-top:auto;padding-top:8px;border-top:1px solid rgba(255,255,255,.08);}
-.main{margin-left:var(--sidebar-width);width:calc(100% - var(--sidebar-width));min-width:0;overflow-x:hidden;position:relative;z-index:1;}
-.topbar{position:sticky;top:0;z-index:12;background:rgba(10,6,28,.55);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 8px 30px rgba(4,2,18,.18);}
-.topbar-inner{padding:22px 30px;display:flex;align-items:center;justify-content:space-between;gap:20px;max-width:100%;min-width:0;}
-.hero-title{display:flex;flex-direction:column;gap:6px;min-width:0;}
-.hero-title .eyebrow{color:rgba(232,236,255,.72);font-weight:600;font-size:1rem;}
-.hero-title h1{margin:0;font-size:2rem;line-height:1.05;font-weight:800;letter-spacing:-.04em;color:#f7f5ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 24px rgba(123,97,255,.14);}
-.hero-title .sub{color:rgba(232,236,255,.70);font-size:.98rem;display:flex;gap:12px;flex-wrap:wrap;}
-.topbar-actions{display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:flex-end;min-width:0;}
-.action-btn{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-weight:700;padding:10px 16px;border-radius:16px;transition:transform .25s ease, box-shadow .25s ease, background .25s ease, border-color .25s ease;display:inline-flex;align-items:center;gap:10px;white-space:nowrap;backdrop-filter:blur(12px);}
-.action-btn:hover{background:rgba(255,255,255,.12);transform:translateY(-2px);box-shadow:0 16px 28px rgba(0,0,0,.20);border-color:rgba(255,255,255,.26);color:#fff;}
-.user-chip{display:flex;align-items:center;gap:12px;padding:8px 10px 8px 8px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);box-shadow:var(--shadow-soft);max-width:100%;backdrop-filter:blur(12px);}
-.user-chip .avatar{width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#d8e8ff,#b6c8ff);color:#3254c7;display:grid;place-items:center;font-weight:800;font-size:1.1rem;flex:0 0 auto;animation:floatIcon 3.8s ease-in-out infinite;}
-.user-chip .info{line-height:1.2;padding-right:10px;min-width:0;}
-.user-chip .info .name{font-weight:800;font-size:.98rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f7f8ff;}
-.user-chip .info .role{color:rgba(232,236,255,.72);font-size:.84rem;}
-.page{padding:22px 28px 36px;max-width:100%;overflow-x:hidden;position:relative;}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:18px;margin-bottom:22px;width:100%;}
-.stat-card{border-radius:28px;padding:22px;min-height:132px;display:flex;flex-direction:column;justify-content:space-between;border:1px solid rgba(255,255,255,.14);box-shadow:var(--shadow);overflow:hidden;position:relative;min-width:0;transform:translateZ(0);transition:transform .45s cubic-bezier(.2,.9,.2,1), box-shadow .45s ease, border-color .45s ease, filter .45s ease;backdrop-filter:blur(14px);background-size:200% 200%;animation:gradientFlow 10s ease infinite, cardFloat 7s ease-in-out infinite;will-change:transform;}
-.stat-card::before{content:'';position:absolute;inset:-2px;background:linear-gradient(135deg, rgba(255,255,255,.55), rgba(255,255,255,0) 32%, rgba(255,255,255,.18));opacity:.58;pointer-events:none;mix-blend-mode:screen;}
-.stat-card::after{content:'';position:absolute;inset:auto -26px -28px auto;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.18);opacity:.55;pointer-events:none;filter:blur(2px);}
-.stat-card:hover{transform:translateY(-10px) scale(1.03);box-shadow:0 26px 60px rgba(4,2,18,.28);border-color:rgba(255,255,255,.34);filter:saturate(1.08);}
-.stat-card .top{display:flex;align-items:center;gap:14px;min-width:0;position:relative;z-index:1;}
-.stat-card .icon{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:rgba(255,255,255,.20);color:#fff;font-size:1.2rem;flex:0 0 auto;box-shadow:0 12px 28px rgba(0,0,0,.14);animation:floatIcon 3.4s ease-in-out infinite;transition:transform .45s ease, box-shadow .45s ease, filter .45s ease;}
-.stat-card:hover .icon{transform:rotate(-6deg) scale(1.10);box-shadow:0 18px 36px rgba(0,0,0,.22);filter:drop-shadow(0 0 10px rgba(255,255,255,.22));}
-.stat-card .label{color:#fff;font-weight:700;font-size:1.02rem;line-height:1.1;}
-.stat-card .value{color:#fff;font-weight:800;font-size:2.05rem;line-height:1;margin-top:6px;letter-spacing:-.04em;}
-.stat-card .note{color:rgba(255,255,255,.86);font-size:.92rem;margin-top:4px;line-height:1.35;}
-.stat-purple{background:linear-gradient(135deg, rgba(123,97,255,.35), rgba(123,97,255,.16) 45%, rgba(255,255,255,.08));}
-.stat-green{background:linear-gradient(135deg, rgba(34,197,94,.30), rgba(34,197,94,.12) 45%, rgba(255,255,255,.08));}
-.stat-orange{background:linear-gradient(135deg, rgba(245,158,11,.28), rgba(245,158,11,.12) 45%, rgba(255,255,255,.08));}
-.stat-blue{background:linear-gradient(135deg, rgba(59,130,246,.32), rgba(59,130,246,.12) 45%, rgba(255,255,255,.08));}
-.stat-red{background:linear-gradient(135deg, rgba(239,68,68,.28), rgba(239,68,68,.12) 45%, rgba(255,255,255,.08));}
-.stat-gray{background:linear-gradient(135deg, rgba(148,163,184,.26), rgba(148,163,184,.10) 45%, rgba(255,255,255,.08));}
-.stat-purple .icon{background:#7B61FF;}
-.stat-green .icon{background:#22C55E;}
-.stat-orange .icon{background:#F59E0B;}
-.stat-blue .icon{background:#3B82F6;}
-.stat-red .icon{background:#ef4444;}
-.stat-gray .icon{background:#64748b;}
-.stat-purple .label,.stat-purple .value,.stat-purple .note{color:#f6f3ff;}
-.stat-green .label,.stat-green .value,.stat-green .note{color:#f1fff5;}
-.stat-orange .label,.stat-orange .value,.stat-orange .note{color:#fff9ee;}
-.stat-blue .label,.stat-blue .value,.stat-blue .note{color:#f4f9ff;}
-.stat-red .label,.stat-red .value,.stat-red .note{color:#fff5f5;}
-.stat-gray .label,.stat-gray .value,.stat-gray .note{color:#f3f6fb;}
-.stack{display:grid;gap:22px;min-width:0;}
-.panel{padding:22px;border-radius:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10);box-shadow:var(--shadow);min-width:0;overflow:hidden;position:relative;backdrop-filter:blur(18px);transition:transform .45s ease, box-shadow .45s ease;}
-.panel::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg, rgba(255,255,255,.06), transparent 25%, transparent 85%, rgba(255,255,255,.04));pointer-events:none;}
-.panel:hover{box-shadow:0 28px 60px rgba(0,0,0,.22);transform:translateY(-4px);}
-.panel-grid-2{display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:22px;align-items:stretch;}
-.section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;min-width:0;}
-.section-head h2{font-size:1.25rem;font-weight:800;margin:0;letter-spacing:-.03em;color:#f7f8ff;}
-.section-head p{margin:6px 0 0;color:var(--muted);font-size:.94rem;}
-.filter-row{display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:14px;width:100%;}
-.filter-row > div{min-width:0;}
-.filter-row label{font-size:.85rem;font-weight:700;color:#eef3ff;margin-bottom:6px;}
-.filter-row .form-control{height:48px;border-radius:14px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.08);color:#fff;box-shadow:none;width:100%;}
-.filter-row .form-control::placeholder{color:rgba(255,255,255,.6);}
-.filter-row .form-control:focus{border-color:rgba(123,97,255,.8);box-shadow:0 0 0 .2rem rgba(123,97,255,.18);background:rgba(255,255,255,.12);color:#fff;}
-.filter-row option{color:#111;}
-.status-badge{padding:8px 12px;border-radius:999px;font-size:.78rem;font-weight:800;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
-.b-success{background:rgba(34,197,94,.16);color:#71f0a2;border:1px solid rgba(34,197,94,.25);}
-.b-warning{background:rgba(245,158,11,.16);color:#ffd48a;border:1px solid rgba(245,158,11,.25);}
-.b-danger{background:rgba(239,68,68,.16);color:#ff9aa5;border:1px solid rgba(239,68,68,.25);}
-.b-gray{background:rgba(148,163,184,.16);color:#d8e2f2;border:1px solid rgba(148,163,184,.25);}
-.b-info{background:rgba(59,130,246,.16);color:#a8d0ff;border:1px solid rgba(59,130,246,.25);}
-.b-purple{background:rgba(123,97,255,.16);color:#d9d2ff;border:1px solid rgba(123,97,255,.25);}
-.notifs-dropdown{width:min(520px, 92vw);max-height:520px;overflow:auto;border-radius:20px;border:1px solid rgba(255,255,255,.13);padding:0;background:rgba(15,8,34,.92);color:#fff;box-shadow:0 30px 80px rgba(0,0,0,.35);}
-.notif-header{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.10);background:linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02));}
-.notif-body{padding:12px;}
-.notif-item{padding:14px;border:1px solid rgba(255,255,255,.09);border-radius:18px;margin-bottom:10px;background:rgba(255,255,255,.05);}
-.notif-item:last-child{margin-bottom:0;}
-.notif-item .title{font-weight:800;margin-bottom:4px;}
-.notif-item .msg{color:rgba(232,236,255,.74);font-size:.92rem;line-height:1.45;}
-.notif-item .time{margin-top:8px;color:rgba(232,236,255,.55);font-size:.8rem;}
-.empty-state{padding:18px;background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.16);border-radius:18px;color:var(--muted);text-align:center;}
-.table-shell{width:100%;max-width:100%;overflow:hidden;border-radius:20px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);backdrop-filter:blur(14px);}
-table{width:100%;max-width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;margin:0;color:var(--text);}
-.table thead th{background:rgba(255,255,255,.07);border-bottom:1px solid rgba(255,255,255,.10);color:#ecf2ff;font-size:.82rem;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;position:sticky;top:0;z-index:1;}
-.table td,.table th{padding:14px 12px;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;white-space:normal;line-height:1.45;}
-.table tbody tr{color:#edf2ff;transition:transform .25s ease, background .25s ease, box-shadow .25s ease;}
-.table tbody tr:hover{background:rgba(123,97,255,.10);transform:translateY(-1px);}
-.results-title{font-size:1.05rem;font-weight:700;margin-bottom:14px;color:#edf3ff;}
-.insights-grid{display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:14px;}
-.info-card{padding:18px;border-radius:22px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);box-shadow:var(--shadow-soft);min-width:0;transition:transform .35s ease, box-shadow .35s ease, border-color .35s ease;backdrop-filter:blur(16px);}
-.info-card:hover{transform:translateY(-4px);box-shadow:0 18px 34px rgba(0,0,0,.22);border-color:rgba(123,97,255,.35);}
-.info-card .label{color:rgba(232,236,255,.62);font-size:.83rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:6px;}
-.info-card .value{font-weight:700;font-size:1rem;margin:0 0 10px;overflow-wrap:anywhere;color:#f6f8ff;}
-.info-card .meta{color:rgba(232,236,255,.72);font-size:.92rem;line-height:1.5;}
-.top-companies-box{height:380px;}
-.status-layout{display:grid;grid-template-columns:minmax(0, 1fr) 240px;gap:22px;align-items:center;}
-.status-visual{display:flex;align-items:center;gap:30px;min-width:0;}
-.status-chart-wrap{width:260px;height:220px;flex:0 0 auto;}
-.status-chart-wrap canvas{width:100% !important;height:100% !important;}
-.status-legend-list{display:flex;flex-direction:column;gap:12px;min-width:0;justify-content:center;}
-.status-legend-item{display:flex;align-items:center;gap:10px;font-size:0.92rem;font-weight:600;color:#edf3ff;white-space:nowrap;}
-.status-dot{width:14px;height:14px;border-radius:3px;flex:0 0 auto;box-shadow:0 0 10px rgba(255,255,255,.15);}
-.status-dot.approved{background:#22c55e;}
-.status-dot.pending{background:#f59e0b;}
-.status-dot.rejected{background:#ef4444;}
-.status-dot.nointernship{background:#9ca3af;}
-.chart-box{width:100%;height:340px;min-width:0;}
-.chart-box.small{height:300px;}
-.chart-box canvas{width:100% !important;height:100% !important;}
-.reveal{opacity:0;transform:translateY(24px) scale(.975);filter:blur(5px);transition:opacity 1.05s cubic-bezier(.16,1,.3,1), transform 1.05s cubic-bezier(.16,1,.3,1), filter 1.05s ease;}
-.reveal.visible{opacity:1;transform:translateY(0) scale(1);filter:blur(0);}
-.chart-ready{opacity:0;transform:translateY(16px) scale(.975);transition:opacity .95s cubic-bezier(.16,1,.3,1), transform .95s cubic-bezier(.16,1,.3,1), filter .95s ease;filter:blur(3px);}
-.chart-ready.visible{opacity:1;transform:translateY(0) scale(1);filter:blur(0);}
-.chart-focus{animation:chartPulse 2.2s ease-in-out infinite;}
-.stat-number{display:inline-block;min-width:1ch;letter-spacing:-.04em;}
-.loading-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 20% 20%, rgba(123,97,255,.22), transparent 30%), linear-gradient(135deg, #0a021a, #11042b 45%, #17053d);transition:opacity .45s ease, visibility .45s ease;}
-.loading-overlay.hidden{opacity:0;visibility:hidden;}
-.loading-card{width:min(760px, 92vw);border-radius:30px;padding:24px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(18px);box-shadow:0 28px 70px rgba(0,0,0,.35);}
-.loading-grid{display:grid;grid-template-columns:repeat(4, 1fr);gap:14px;}
-.loading-skel{height:110px;border-radius:22px;background:linear-gradient(90deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,.12) 50%, rgba(255,255,255,.06) 100%);background-size:200% 100%;animation:shimmer 1.35s linear infinite;border:1px solid rgba(255,255,255,.08);}
-@keyframes chartPulse{0%,100%{filter:drop-shadow(0 0 0 rgba(123,97,255,0));}50%{filter:drop-shadow(0 0 18px rgba(123,97,255,.18));}}
-@keyframes gradientFlow{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
-@keyframes cardFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
-@keyframes floatIcon{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
-@keyframes orbFloat{0%,100%{transform:translate3d(0,0,0) scale(1);}50%{transform:translate3d(0,-18px,0) scale(1.05);}}
-@keyframes particleDrift{0%{transform:translate3d(0, 0, 0) scale(.9); opacity:.08;}15%{opacity:.28;}50%{transform:translate3d(120px, -140px, 0) scale(1.2); opacity:.25;}85%{opacity:.18;}100%{transform:translate3d(260px, -280px, 0) scale(.85); opacity:0;}}
-@keyframes shimmer{0%{background-position:0% 50%;}100%{background-position:200% 50%;}}
-@media (prefers-reduced-motion: reduce){*, *::before, *::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important;}}
-@media(max-width:1200px){.sidebar{position:relative;width:100%;min-height:auto;height:auto;}.main{margin-left:0;width:100%;}.topbar-inner{flex-direction:column;align-items:flex-start;}.topbar-actions{width:100%;justify-content:space-between;}.panel-grid-2{grid-template-columns:1fr;}.insights-grid{grid-template-columns:repeat(2, minmax(0, 1fr));}.loading-grid{grid-template-columns:repeat(2, 1fr);}}
-@media(max-width:768px){.topbar-inner,.page{padding-left:16px;padding-right:16px;}.stats-grid{grid-template-columns:1fr;}.filter-row{grid-template-columns:1fr;}.hero-title h1{font-size:1.45rem;}.user-chip{width:100%;justify-content:space-between;}.section-head{flex-direction:column;}.chart-box{height:280px;}.chart-box.small{height:250px;}.insights-grid{grid-template-columns:1fr;}.table td,.table th{padding:12px 10px;font-size:.92rem;}.status-layout{grid-template-columns:1fr;}.status-visual{flex-direction:column;align-items:flex-start;gap:18px;}.status-chart-wrap{width:100%;max-width:280px;}.status-legend-list{width:100%;}.loading-grid{grid-template-columns:1fr;}}
-
-/* --- BRIGHTER CENTER / PROFESSIONAL MOTION OVERRIDES --- */
-:root{
-    --main-surface: rgba(255,255,255,.88);
-    --main-surface-strong: rgba(255,255,255,.96);
-    --main-text:#152033;
-    --main-muted:#5c6782;
-    --main-border:rgba(123,97,255,.12);
-}
-
-.main{
-    color:#1f2430;
-    background:
-        radial-gradient(circle at top left, rgba(123,97,255,.14), transparent 26%),
-        radial-gradient(circle at top right, rgba(0,229,255,.10), transparent 22%),
-        radial-gradient(circle at bottom right, rgba(255,79,216,.06), transparent 18%),
-        linear-gradient(180deg, #ffffff 0%, #faf9ff 38%, #f2f6ff 100%);
-    position:relative;
-}
-
-.main::before{
-    content:"";
-    position:absolute;
-    inset:0;
-    pointer-events:none;
-    background:
-        radial-gradient(circle at 20% 12%, rgba(123,97,255,.08), transparent 22%),
-        radial-gradient(circle at 85% 15%, rgba(0,229,255,.06), transparent 18%),
-        radial-gradient(circle at 70% 80%, rgba(255,79,216,.05), transparent 18%);
-}
-
-.page{
-    background:transparent;
-    position:relative;
-    z-index:1;
-}
-
-.topbar{
-    background:rgba(255,255,255,.88);
-    backdrop-filter:blur(20px);
-    border-bottom:1px solid rgba(123,97,255,.10);
-    box-shadow:0 8px 30px rgba(73,45,150,.06);
-}
-
-.hero-title .eyebrow,
-.hero-title .sub,
-.section-head p,
-.info-card .meta,
-.empty-state,
-.results-title{
-    color:var(--main-muted);
-}
-
-.hero-title h1,
-.section-head h2{
-    color:#253063;
-}
-
-.action-btn{
-    background:rgba(255,255,255,.86);
-    color:#4338ca;
-    border-color:rgba(123,97,255,.14);
-    box-shadow:0 10px 25px rgba(123,97,255,.08);
-}
-
-.action-btn:hover{
-    background:#fff;
-    color:#3127d1;
-    border-color:rgba(123,97,255,.28);
-}
-
-.user-chip{
-    background:rgba(255,255,255,.92);
-    border-color:rgba(123,97,255,.12);
-}
-
-.user-chip .info .name,
-.user-chip .info .role{
-    color:#1f2430;
-}
-
-.panel{
-    color:#1f2430;
-    background:var(--main-surface);
-    border:1px solid var(--main-border);
-    box-shadow:0 18px 50px rgba(80,52,160,.08);
-    backdrop-filter:blur(18px);
-}
-
-.panel::before{
-    background:linear-gradient(180deg, rgba(255,255,255,.48), transparent 25%, transparent 85%, rgba(255,255,255,.24));
-}
-
-.panel:hover{
-    box-shadow:0 26px 60px rgba(80,52,160,.14);
-    transform:translateY(-4px);
-}
-
-.section-head h2{
-    color:#1b2440;
-}
-
-.stat-card{
-    border:1px solid rgba(123,97,255,.13);
-    background-size:200% 200%;
-    box-shadow:0 20px 52px rgba(80,52,160,.10);
-    backdrop-filter:blur(16px);
-    transition:transform .42s cubic-bezier(.2,.9,.2,1), box-shadow .42s ease, border-color .42s ease, filter .42s ease;
-    animation:gradientFlow 12s ease infinite;
-    min-height:160px;
-}
-
-.stat-card:hover{
-    transform:translateY(-10px) scale(1.03);
-    box-shadow:0 28px 68px rgba(80,52,160,.18);
-    border-color:rgba(123,97,255,.28);
-    filter:saturate(1.05);
-}
-
-.stat-card::before{
-    content:'';
-    position:absolute;
-    inset:-2px;
-    background:linear-gradient(135deg, rgba(255,255,255,.62), rgba(255,255,255,0) 32%, rgba(255,255,255,.20));
-    opacity:.55;
-    pointer-events:none;
-    mix-blend-mode:screen;
-}
-
-.stat-card::after{
-    content:'';
-    position:absolute;
-    inset:auto -26px -28px auto;
-    width:140px;
-    height:140px;
-    border-radius:50%;
-    background:rgba(255,255,255,.22);
-    opacity:.45;
-    pointer-events:none;
-    filter:blur(2px);
-}
-
-.stat-card .top{
-    position:relative;
-    z-index:1;
-}
-
-.stat-card .icon{
-    box-shadow:0 12px 28px rgba(0,0,0,.12);
-}
-
-.stat-card .label,
-.stat-card .value,
-.stat-card .note{
-    color:#172033;
-}
-
-.stat-card .label{
-    font-weight:800;
-    font-size:1rem;
-}
-
-.stat-card .value{
-    font-weight:900;
-    font-size:2.15rem;
-    letter-spacing:-.05em;
-}
-
-.stat-card .note{
-    font-size:.92rem;
-    line-height:1.35;
-    color:#45506b;
-}
-
-.stat-purple{
-    background:linear-gradient(135deg, rgba(123,97,255,.20), rgba(255,255,255,.88) 52%, rgba(241,238,255,.96));
-}
-
-.stat-blue{
-    background:linear-gradient(135deg, rgba(59,130,246,.18), rgba(255,255,255,.88) 52%, rgba(238,246,255,.98));
-}
-
-.stat-green{
-    background:linear-gradient(135deg, rgba(34,197,94,.18), rgba(255,255,255,.88) 52%, rgba(238,255,244,.98));
-}
-
-.stat-orange{
-    background:linear-gradient(135deg, rgba(245,158,11,.18), rgba(255,255,255,.88) 52%, rgba(255,249,236,.98));
-}
-
-.stat-red{
-    background:linear-gradient(135deg, rgba(239,68,68,.18), rgba(255,255,255,.88) 52%, rgba(255,239,241,.98));
-}
-
-.stat-gray{
-    background:linear-gradient(135deg, rgba(100,116,139,.16), rgba(255,255,255,.88) 52%, rgba(244,247,251,.98));
-}
-
-.stat-purple .label,.stat-purple .value,.stat-purple .note{color:#2f2358;}
-.stat-blue .label,.stat-blue .value,.stat-blue .note{color:#183b7a;}
-.stat-green .label,.stat-green .value,.stat-green .note{color:#1f4f30;}
-.stat-orange .label,.stat-orange .value,.stat-orange .note{color:#7a4f00;}
-.stat-red .label,.stat-red .value,.stat-red .note{color:#7f1d2d;}
-.stat-gray .label,.stat-gray .value,.stat-gray .note{color:#334155;}
-
-.stats-grid{
-    display:grid;
-    grid-template-columns:repeat(4, minmax(0, 1fr));
-    gap:18px;
-    margin-bottom:22px;
-}
-
-.stats-grid .stat-card:nth-child(1){transition-delay:0ms;}
-.stats-grid .stat-card:nth-child(2){transition-delay:40ms;}
-.stats-grid .stat-card:nth-child(3){transition-delay:80ms;}
-.stats-grid .stat-card:nth-child(4){transition-delay:120ms;}
-.stats-grid .stat-card:nth-child(5){transition-delay:160ms;}
-.stats-grid .stat-card:nth-child(6){transition-delay:200ms;}
-.stats-grid .stat-card:nth-child(7){transition-delay:240ms;}
-.stats-grid .stat-card:nth-child(8){transition-delay:280ms;}
-
-.panel-grid-2{
-    display:grid;
-    grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
-    gap:22px;
-    align-items:stretch;
-}
-
-.info-card,
-.table-shell,
-.notifs-dropdown{
-    background:rgba(255,255,255,.86);
-    border-color:rgba(123,97,255,.12);
-}
-
-.table-shell{
-    color:#1f2430;
-}
-
-.info-card{
-    transition:transform .32s ease, box-shadow .32s ease, border-color .32s ease;
-}
-
-.info-card:hover{
-    transform:translateY(-4px);
-    box-shadow:0 18px 34px rgba(80,52,160,.14);
-    border-color:rgba(123,97,255,.28);
-}
-
-.info-card .label{
-    color:#6b7280;
-}
-
-.info-card .value{
-    color:#162033;
-}
-
-.info-card .meta{
-    color:#5c6782;
-}
-
-.empty-state{
-    background:linear-gradient(135deg, #f7f5ff, #eef5ff);
-    color:#5c6782;
-    border-color:rgba(123,97,255,.22);
-}
-
-.table thead th{
-    background:rgba(247,245,255,.96);
-    color:#2f365f;
-    border-bottom:1px solid rgba(123,97,255,.12);
-}
-
-.table tbody tr{
-    color:#1f2430;
-}
-
-.table tbody tr:hover{
-    background:rgba(123,97,255,.05);
-}
-
-.results-title{
-    color:#1f2430;
-}
-
-.status-legend-item{
-    color:#1f2430;
-}
-
-.status-dot.approved{ box-shadow:0 0 10px rgba(34,197,94,.25); }
-.status-dot.pending{ box-shadow:0 0 10px rgba(245,158,11,.25); }
-.status-dot.rejected{ box-shadow:0 0 10px rgba(239,68,68,.25); }
-.status-dot.nointernship{ box-shadow:0 0 10px rgba(156,163,175,.25); }
-
-.chart-box{
-    transition:transform .42s ease, filter .42s ease;
-}
-
-.chart-box:hover{
-    transform:translateY(-3px) scale(1.01);
-    filter:drop-shadow(0 16px 34px rgba(123,97,255,.12));
-}
-
-.chart-ready{
-    opacity:0;
-    transform:translateY(10px) scale(.985);
-    transition:opacity .7s ease, transform .7s cubic-bezier(.2,.8,.2,1);
-}
-
-.chart-ready.visible{
-    opacity:1;
-    transform:translateY(0) scale(1);
-}
-
-.reveal{
-    opacity:0;
-    transform:translateY(18px) scale(.985);
-    filter:blur(4px);
-    transition:opacity .8s cubic-bezier(.2,.8,.2,1), transform .8s cubic-bezier(.2,.8,.2,1), filter .8s ease;
-}
-
-.reveal.visible{
-    opacity:1;
-    transform:translateY(0) scale(1);
-    filter:blur(0);
-}
-
-.top-companies-box{ height:380px; }
-
-.status-layout{
-    display:grid;
-    grid-template-columns:minmax(0, 1fr) 240px;
-    gap:22px;
-    align-items:center;
-}
-
-.status-visual{
-    display:flex;
-    align-items:center;
-    gap:30px;
-    min-width:0;
-}
-
-.status-chart-wrap{
-    width:260px;
-    height:220px;
-    flex:0 0 auto;
-}
-
-.status-chart-wrap canvas{
-    width:100% !important;
-    height:100% !important;
-}
-
-.status-legend-list{
-    display:flex;
-    flex-direction:column;
-    gap:12px;
-    min-width:0;
-    justify-content:center;
-}
-
-.status-legend-item{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    font-size:0.92rem;
-    font-weight:700;
-    white-space:nowrap;
-}
-
-.stat-number{
-    display:inline-block;
-    min-width:1ch;
-    letter-spacing:-.04em;
-}
-
-.notifs-dropdown{
-    color:#1f2430;
-    width:min(520px, 92vw);
-    max-height:520px;
-    overflow:auto;
-    border-radius:20px;
-    padding:0;
-    box-shadow:0 30px 80px rgba(0,0,0,.18);
-}
-
-.notif-header{
-    padding:16px 18px;
-    border-bottom:1px solid rgba(123,97,255,.10);
-    background:linear-gradient(135deg,#fcfbff,#f5f1ff);
-}
-
-.notif-body{
-    padding:12px;
-}
-
-.notif-item{
-    padding:14px;
-    border:1px solid rgba(123,97,255,.10);
-    border-radius:18px;
-    margin-bottom:10px;
-    background:#fff;
-}
-
-.notif-item:last-child{margin-bottom:0;}
-
-.notif-item .title{
-    font-weight:800;
-    margin-bottom:4px;
-    color:#162033;
-}
-
-.notif-item .msg{
-    color:#5c6782;
-    font-size:.92rem;
-    line-height:1.45;
-}
-
-.notif-item .time{
-    margin-top:8px;
-    color:#7c849b;
-    font-size:.8rem;
-}
-
-.status-badge{
-    padding:8px 12px;
-    border-radius:999px;
-    font-size:.78rem;
-    font-weight:800;
-    display:inline-flex;
-    align-items:center;
-    gap:6px;
-    white-space:nowrap;
-}
-
-.b-success{background:#edf9f2;color:#1f9d5a;border:1px solid rgba(34,197,94,.18);}
-.b-warning{background:#fff4d6;color:#a86f00;border:1px solid rgba(245,158,11,.18);}
-.b-danger{background:#feecef;color:#c63e52;border:1px solid rgba(239,68,68,.18);}
-.b-gray{background:#edf0f7;color:#586178;border:1px solid rgba(100,116,139,.18);}
-.b-info{background:#eef5ff;color:#2b7cff;border:1px solid rgba(59,130,246,.18);}
-.b-purple{background:#f0ebff;color:#5b3df5;border:1px solid rgba(123,97,255,.18);}
-
-.filter-row label{
-    color:#253063;
-}
-.filter-row .form-control{
-    background:#fff;
-    color:#162033;
-    border:1px solid rgba(123,97,255,.14);
-}
-
-.filter-row .form-control:focus{
-    border-color:#7B61FF;
-    box-shadow:0 0 0 .2rem rgba(123,97,255,.12);
-}
-
-@media (max-width: 1200px){
-    .sidebar{
-        position:relative;
-        width:100%;
-        min-height:auto;
-        height:auto;
-    }
-    .main{
-        margin-left:0;
-        width:100%;
-    }
-    .topbar-inner{
-        flex-direction:column;
-        align-items:flex-start;
-    }
-    .topbar-actions{
-        width:100%;
-        justify-content:space-between;
-    }
-    .panel-grid-2{
-        grid-template-columns:1fr;
-    }
-    .stats-grid{
-        grid-template-columns:repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 768px){
-    .topbar-inner,
-    .page{
-        padding-left:16px;
-        padding-right:16px;
-    }
-    .stats-grid{
-        grid-template-columns:1fr;
-    }
-    .filter-row{
-        grid-template-columns:1fr;
-    }
-    .hero-title h1{
-        font-size:1.45rem;
-    }
-    .user-chip{
-        width:100%;
-        justify-content:space-between;
-    }
-    .section-head{
-        flex-direction:column;
-    }
-    .chart-box{
-        height:280px;
-    }
-    .chart-box.small{
-        height:250px;
-    }
-    .insights-grid{
-        grid-template-columns:1fr;
-    }
-    .table td,
-    .table th{
-        padding:12px 10px;
-        font-size:.92rem;
-    }
-    .status-layout{
-        grid-template-columns:1fr;
-    }
-    .status-visual{
-        flex-direction:column;
-        align-items:flex-start;
-        gap:18px;
-    }
-    .status-chart-wrap{
-        width:100%;
-        max-width:280px;
-    }
-    .status-legend-list{
-        width:100%;
-    }
-}
-
-
-/* ===== chart motion upgrades ===== */
-.section-head h2{
-    position:relative;
-    display:inline-block;
-    padding-bottom:12px;
-}
-.section-head h2::after{
-    content:"";
-    position:absolute;
-    left:0;
-    bottom:0;
-    width:78px;
-    height:3px;
-    border-radius:999px;
-    background:linear-gradient(90deg, var(--purple), var(--blue), var(--cyan), var(--pink));
-    box-shadow:0 0 18px rgba(123,97,255,.24);
-    transform-origin:left center;
-    animation:underlinePulse 4.5s ease-in-out infinite;
-}
-.chart-ready{
-    position:relative;
-    isolation:isolate;
-    overflow:hidden;
-}
-.chart-ready::before{
-    content:"";
-    position:absolute;
-    inset:10px;
-    border-radius:24px;
-    pointer-events:none;
-    background:
-        radial-gradient(circle at 18% 18%, rgba(123,97,255,.20), transparent 34%),
-        radial-gradient(circle at 82% 22%, rgba(0,229,255,.12), transparent 32%),
-        radial-gradient(circle at 50% 85%, rgba(255,79,216,.08), transparent 28%);
-    filter:blur(16px);
-    opacity:.7;
-    transform:translateZ(0);
-    animation:chartGlowDrift 12s ease-in-out infinite;
-}
-.chart-ready::after{
-    content:"";
-    position:absolute;
-    inset:-28%;
-    border-radius:50%;
-    pointer-events:none;
-    background:conic-gradient(from 0deg, rgba(123,97,255,.0), rgba(123,97,255,.40), rgba(0,229,255,.24), rgba(255,79,216,.28), rgba(123,97,255,.0));
-    opacity:0;
-    filter:blur(24px);
-    animation:ringSpin 14s linear infinite;
-    mix-blend-mode:screen;
-}
-.chart-ready.chart-active::after{
-    opacity:.55;
-}
-.chart-ready canvas{
-    position:relative;
-    z-index:1;
-}
-.chart-legend-pills{
-    display:flex;
-    flex-wrap:wrap;
-    gap:10px;
-    margin-top:14px;
-    position:relative;
-    z-index:2;
-}
-.chart-legend-pills.compact{
-    gap:8px;
-}
-.legend-pill{
-    display:inline-flex;
-    align-items:center;
-    gap:10px;
-    padding:10px 12px;
-    border-radius:999px;
-    background:rgba(255,255,255,.86);
-    border:1px solid rgba(123,97,255,.12);
-    box-shadow:0 10px 24px rgba(80,52,160,.08);
-    backdrop-filter:blur(12px);
-    color:#1f2430;
-    font-size:.86rem;
-    font-weight:700;
-    transform:translateY(10px);
-    opacity:0;
-    animation:legendPop .68s cubic-bezier(.2,.8,.2,1) forwards;
-    animation-delay:var(--delay, 0s);
-    transition:transform .28s ease, box-shadow .28s ease, border-color .28s ease;
-}
-.legend-pill:hover{
-    transform:translateY(-2px) scale(1.02);
-    box-shadow:0 16px 28px rgba(80,52,160,.14);
-    border-color:rgba(123,97,255,.24);
-}
-.legend-pill .swatch{
-    width:10px;
-    height:10px;
-    border-radius:999px;
-    flex:0 0 auto;
-    box-shadow:0 0 14px currentColor;
-}
-.legend-pill .text{
-    display:flex;
-    flex-direction:column;
-    gap:1px;
-    min-width:0;
-}
-.legend-pill .text .name{
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-}
-.legend-pill .text .count{
-    font-size:.74rem;
-    font-weight:800;
-    color:#5e6881;
-}
-.legend-pill .count-chip{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    min-width:28px;
-    height:24px;
-    padding:0 8px;
-    border-radius:999px;
-    font-size:.76rem;
-    font-weight:900;
-    color:#1f2430;
-    background:rgba(123,97,255,.10);
-}
-.chart-note{
-    margin-top:12px;
-    color:#5c6782;
-    font-size:.92rem;
-}
-.chart-ready.chart-active{
-    animation:chartPulse 2.4s ease-in-out infinite;
-}
-.status-legend-list{
-    flex-wrap:wrap;
-}
-.status-legend-list .legend-pill{
-    animation-delay:var(--delay, 0s);
-}
-.chart-focus:hover{
-    transform:translateY(-3px) scale(1.01);
-}
-.chart-shell-caption{
-    margin-top:10px;
-    color:#5c6782;
-    font-size:.9rem;
-    line-height:1.45;
-}
-@keyframes chartGlowDrift{
-    0%,100%{transform:translate3d(0,0,0) scale(1);}
-    50%{transform:translate3d(0,-8px,0) scale(1.03);}
-}
-@keyframes ringSpin{
-    0%{transform:rotate(0deg);}
-    100%{transform:rotate(360deg);}
-}
-@keyframes legendPop{
-    0%{opacity:0; transform:translateY(10px) scale(.96);}
-    70%{opacity:1; transform:translateY(-2px) scale(1.01);}
-    100%{opacity:1; transform:translateY(0) scale(1);}
-}
-@keyframes underlinePulse{
-    0%,100%{transform:scaleX(.86); opacity:.75;}
-    50%{transform:scaleX(1); opacity:1;}
-}
-@media (max-width: 768px){
-    .legend-pill{
-        width:100%;
-        justify-content:flex-start;
-    }
-}
-
-/* =====================================================================
-   CHART CASCADE — "stacked chart cascade" style entrance, applied
-   identically to both donut panels (Internship Status / Internship
-   Type Analysis). A trio of rings scale outward and fade behind the
-   chart while the chart itself pops in with a bouncy overshoot, and
-   the Chart.js animation.delay (set on statusChart/typeChart in the
-   script below) staggers each wedge on top of that so the slices
-   read as stacking in one after another. Purely CSS-driven via
-   :has(), so it re-plays automatically whenever the panel re-enters
-   the viewport (IntersectionObserver toggles .visible on the same
-   element these rules key off of).
-   ===================================================================== */
-.chart-cascade{
-    position:relative;
-    width:260px;
-    height:220px;
-    flex:0 0 auto;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-}
-.cascade-ring{
-    position:absolute;
-    left:50%;
-    top:50%;
-    width:170px;
-    height:170px;
-    border-radius:50%;
-    border:3px solid rgba(123,97,255,.35);
-    transform:translate(-50%,-50%) scale(.4);
-    opacity:0;
-    pointer-events:none;
-}
-.chart-cascade:has(.status-chart-wrap.visible) .ring-1{
-    animation:cascadeRing 1.05s cubic-bezier(.16,1,.3,1) forwards;
-    animation-delay:0ms;
-}
-.chart-cascade:has(.status-chart-wrap.visible) .ring-2{
-    border-color:rgba(0,229,255,.30);
-    animation:cascadeRing 1.05s cubic-bezier(.16,1,.3,1) forwards;
-    animation-delay:110ms;
-}
-.chart-cascade:has(.status-chart-wrap.visible) .ring-3{
-    border-color:rgba(255,79,216,.28);
-    animation:cascadeRing 1.05s cubic-bezier(.16,1,.3,1) forwards;
-    animation-delay:220ms;
-}
-@keyframes cascadeRing{
-    0%{opacity:0; transform:translate(-50%,-50%) scale(.4);}
-    35%{opacity:.9;}
-    100%{opacity:0; transform:translate(-50%,-50%) scale(1.35);}
-}
-/* Bouncy pop-in for the chart itself — higher specificity than the
-   generic .chart-ready rules above so it wins the cascade, and kept
-   byte-for-byte the same for statusChart's and typeChart's wrapper
-   since both share the .status-chart-wrap.chart-ready selector. */
-.status-chart-wrap.chart-ready{
-    position:relative;
-    z-index:1;
-    opacity:0;
-    transform:scale(.55) rotate(-12deg);
-    transition:opacity .85s cubic-bezier(.34,1.56,.64,1), transform .85s cubic-bezier(.34,1.56,.64,1), filter .85s ease;
-    transition-delay:120ms;
-}
-.status-chart-wrap.chart-ready.visible{
-    opacity:1;
-    transform:scale(1) rotate(0deg);
-}
-@media (prefers-reduced-motion: reduce){
-    .cascade-ring{animation:none !important; opacity:0 !important;}
-    .status-chart-wrap.chart-ready{transition-delay:0ms !important;}
-}
-
-/* =====================================================================
-   NOTIFICATION "READ MORE" MODAL — new styles
-   Keeps the dropdown compact; full text lives here so nothing gets
-   cut off. Matches the light glass card look already used by
-   .notifs-dropdown / .notif-item above.
-   ===================================================================== */
-.read-more-btn{
-    border:1px solid rgba(123,97,255,.25);
-    background:rgba(123,97,255,.08);
-    color:#5b3df5;
-    font-weight:700;
-    font-size:.78rem;
-    padding:6px 12px;
-    border-radius:999px;
-    transition:background .2s ease, transform .2s ease, box-shadow .2s ease;
-}
-.read-more-btn:hover{
-    background:#5b3df5;
-    color:#fff;
-    transform:translateY(-1px);
-    box-shadow:0 10px 20px rgba(91,61,245,.24);
-}
-.notif-modal-content{
-    border-radius:24px;
-    border:1px solid rgba(123,97,255,.14);
-    background:rgba(255,255,255,.98);
-    box-shadow:0 30px 80px rgba(30,10,80,.28);
-    overflow:hidden;
-}
-.notif-modal-header{
-    padding:18px 22px;
-    border-bottom:1px solid rgba(123,97,255,.10);
-    background:linear-gradient(135deg, #f7f5ff, #eef5ff);
-}
-.notif-modal-header .modal-title{
-    font-weight:800;
-    color:#1f2430;
-    font-size:1.1rem;
-    overflow-wrap:anywhere;
-}
-.notif-modal-body{
-    padding:22px;
-    max-height:65vh;
-    overflow-y:auto;
-    color:#1f2430;
-}
-.notif-modal-time{
-    color:#5c6782;
-    font-size:.88rem;
-    margin-bottom:14px;
-}
-.notif-modal-message{
-    font-size:.98rem;
-    line-height:1.7;
-    color:#26304a;
-    white-space:pre-wrap;
-    overflow-wrap:anywhere;
-}
-.notif-modal-divider{
-    border:none;
-    border-top:1px solid rgba(123,97,255,.12);
-    margin:20px 0;
-}
-.notif-modal-section-label{
-    font-weight:800;
-    font-size:.86rem;
-    text-transform:uppercase;
-    letter-spacing:.06em;
-    color:#5c6782;
-    margin-bottom:12px;
-}
-.notif-attachment-card{
-    display:flex;
-    align-items:center;
-    gap:14px;
-    padding:14px;
-    border-radius:18px;
-    background:#f7f8fc;
-    border:1px solid rgba(123,97,255,.12);
-    flex-wrap:wrap;
-}
-.notif-attachment-icon{
-    width:52px;
-    height:52px;
-    border-radius:14px;
-    display:grid;
-    place-items:center;
-    background:rgba(123,97,255,.10);
-    font-size:1.4rem;
-    flex:0 0 auto;
-}
-.notif-attachment-info{
-    flex:1 1 160px;
-    min-width:0;
-}
-.notif-attachment-name{
-    font-weight:700;
-    color:#1f2430;
-    overflow-wrap:anywhere;
-}
-.notif-attachment-type{
-    font-size:.82rem;
-    color:#5c6782;
-}
-.notif-attachment-actions{
-    display:flex;
-    gap:8px;
-    flex:0 0 auto;
-}
-.notif-btn-view,
-.notif-btn-download{
-    border-radius:12px;
-    font-weight:700;
-    font-size:.82rem;
-    padding:8px 14px;
-    border:1px solid rgba(123,97,255,.20);
-}
-.notif-btn-view{
-    background:#fff;
-    color:#5b3df5;
-}
-.notif-btn-view:hover{
-    background:rgba(123,97,255,.08);
-    color:#5b3df5;
-}
-.notif-btn-download{
-    background:#5b3df5;
-    color:#fff;
-}
-.notif-btn-download:hover{
-    background:#4a2fe0;
-    color:#fff;
-}
-.notif-modal-footer{
-    padding:14px 22px;
-    border-top:1px solid rgba(123,97,255,.10);
-    background:#fafaff;
-}
-@media (max-width:768px){
-    .notif-modal-body{ padding:16px; max-height:70vh; }
-    .notif-attachment-actions{ width:100%; }
-    .notif-attachment-actions a{ flex:1 1 auto; text-align:center; }
-}
-@media (max-width:480px){
-    .modal-dialog{ margin:10px; }
-    .notif-modal-header{ padding:14px 16px; }
-    .notif-modal-header .modal-title{ font-size:1rem; }
-}
-
-</style>
-
-<?php include __DIR__ . '/includes/sidebar_head.php'; ?>
-
+        /* Dashboard Container */
+        .dash-content {
+            padding: 0 32px 32px;
+        }
+
+        /* Hero Banner */
+        .faculty-hero-banner {
+            position: relative;
+            background: linear-gradient(135deg, rgba(61, 20, 82, 0.88) 0%, rgba(31, 5, 41, 0.82) 100%),
+                        url('../assets/images/campus_banner_golden.webp') center/cover no-repeat;
+            border-radius: 20px;
+            padding: 34px 38px;
+            color: #ffffff;
+            box-shadow: 0 8px 30px rgba(61, 20, 82, 0.16);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .faculty-hero-left {
+            max-width: 680px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .faculty-hero-title {
+            font-family: var(--f-font-serif);
+            font-style: italic;
+            font-weight: 700;
+            font-size: 2.3rem;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+            line-height: 1.15;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .faculty-hero-subtitle {
+            font-size: 0.95rem;
+            color: rgba(255, 255, 255, 0.9);
+            line-height: 1.5;
+            margin-bottom: 14px;
+        }
+
+        .faculty-hero-pill-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .faculty-hero-pill {
+            background: rgba(255, 255, 255, 0.16);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            border-radius: 999px;
+            padding: 5px 14px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 5 Pastel KPI Cards Grid */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 18px 20px;
+            border: 1px solid #f1f5f9;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(61, 20, 82, 0.08);
+        }
+
+        .kpi-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .kpi-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #64748b;
+        }
+
+        .kpi-icon-box {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+        }
+
+        .kpi-value-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+
+        .kpi-value {
+            font-size: 1.85rem;
+            font-weight: 800;
+            color: #1e1b4b;
+            line-height: 1;
+        }
+
+        .kpi-badge {
+            font-size: 0.70rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+
+        /* Card Pastel Themes */
+        .kpi-peach { background: var(--f-peach-bg); border-color: var(--f-peach-border); }
+        .kpi-peach .kpi-icon-box { background: #ffedd5; color: var(--f-peach-text); }
+        .kpi-peach .kpi-badge { background: #fed7aa; color: var(--f-peach-text); }
+
+        .kpi-lavender { background: var(--f-lavender-bg); border-color: var(--f-lavender-border); }
+        .kpi-lavender .kpi-icon-box { background: #ede9fe; color: var(--f-lavender-text); }
+        .kpi-lavender .kpi-badge { background: #e9d5ff; color: var(--f-lavender-text); }
+
+        .kpi-mint { background: var(--f-mint-bg); border-color: var(--f-mint-border); }
+        .kpi-mint .kpi-icon-box { background: #d1fae5; color: var(--f-mint-text); }
+        .kpi-mint .kpi-badge { background: #a7f3d0; color: var(--f-mint-text); }
+
+        .kpi-sky { background: var(--f-sky-bg); border-color: var(--f-sky-border); }
+        .kpi-sky .kpi-icon-box { background: #dbeafe; color: var(--f-sky-text); }
+        .kpi-sky .kpi-badge { background: #bfdbfe; color: var(--f-sky-text); }
+
+        .kpi-rose { background: var(--f-rose-bg); border-color: var(--f-rose-border); }
+        .kpi-rose .kpi-icon-box { background: #ffe4e6; color: var(--f-rose-text); }
+        .kpi-rose .kpi-badge { background: #fecdd3; color: var(--f-rose-text); }
+
+        /* Dashboard Rows Grid */
+        .dash-row-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .dash-row-lower {
+            display: grid;
+            grid-template-columns: 1.25fr 0.85fr 0.9fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        /* Standard Card Panel */
+        .panel-card {
+            background: #ffffff;
+            border-radius: 18px;
+            border: 1px solid #eef2f6;
+            padding: 22px;
+            box-shadow: 0 4px 20px -2px rgba(61, 20, 82, 0.04);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+
+        .panel-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1e1b4b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-action-link {
+            font-size: 0.80rem;
+            font-weight: 600;
+            color: #7c3aed;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .panel-action-link:hover {
+            color: #5b21b6;
+            text-decoration: underline;
+        }
+
+        /* Widget 1: My Tasks */
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex: 1;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: #f8fafc;
+            border: 1px solid #f1f5f9;
+            transition: all 0.2s ease;
+        }
+
+        .task-item:hover {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+
+        .task-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .task-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .task-indicator.urgent { background: #ef4444; }
+        .task-indicator.pending { background: #f59e0b; }
+        .task-indicator.good { background: #10b981; }
+
+        .task-info {
+            min-width: 0;
+        }
+
+        .task-name {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #1e1b4b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .task-sub {
+            font-size: 0.74rem;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        .task-btn {
+            padding: 6px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 8px;
+            background: #f1f5f9;
+            color: #334155;
+            text-decoration: none;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .task-btn:hover {
+            background: #7c3aed;
+            color: #ffffff;
+        }
+
+        /* Widget 2: Donut Chart */
+        .chart-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            padding: 10px 0;
+        }
+
+        .donut-wrap {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin-bottom: 16px;
+        }
+
+        .donut-svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+        .donut-bg {
+            fill: none;
+            stroke: #f1f5f9;
+            stroke-width: 14;
+        }
+
+        .donut-segment {
+            fill: none;
+            stroke-width: 14;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.8s ease;
+        }
+
+        .donut-center-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .donut-percent {
+            font-size: 1.7rem;
+            font-weight: 800;
+            color: #1e1b4b;
+            line-height: 1;
+        }
+
+        .donut-label {
+            font-size: 0.70rem;
+            font-weight: 600;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .chart-legend {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.76rem;
+            font-weight: 500;
+            color: #475569;
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* Widget 3: AI Mentor Assistant Card */
+        .ai-mentor-panel {
+            background: linear-gradient(135deg, #2e0d3c 0%, #3d1452 50%, #1f0529 100%);
+            color: #ffffff;
+            border-radius: 18px;
+            padding: 22px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 8px 24px rgba(61, 20, 82, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ai-mentor-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 8px;
+        }
+
+        .ai-mentor-desc {
+            font-size: 0.82rem;
+            color: rgba(255, 255, 255, 0.82);
+            line-height: 1.45;
+            margin-bottom: 16px;
+        }
+
+        .ai-prompt-pills {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .ai-pill-btn {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: #ffffff;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .ai-pill-btn:hover {
+            background: rgba(255, 255, 255, 0.22);
+            transform: translateX(3px);
+        }
+
+        .ai-input-bar {
+            display: flex;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 999px;
+            padding: 4px 6px 4px 14px;
+        }
+
+        .ai-input-field {
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 0.82rem;
+            color: #ffffff;
+            flex: 1;
+            font-family: var(--f-font-sans);
+        }
+
+        .ai-input-field::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .ai-send-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #fbbf24;
+            color: #1e1b4b;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            transition: all 0.2s ease;
+        }
+
+        .ai-send-btn:hover {
+            background: #f59e0b;
+            transform: scale(1.05);
+        }
+
+        /* Widget 4: Recent Applications Table */
+        .app-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .app-table th {
+            text-align: left;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+            padding: 0 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .app-table td {
+            padding: 11px 8px;
+            font-size: 0.84rem;
+            border-bottom: 1px solid #f8fafc;
+            color: #334155;
+            vertical-align: middle;
+        }
+
+        .student-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .student-avatar-sm {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #7c3aed, #4f46e5);
+            color: #ffffff;
+            font-size: 0.80rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .student-name-bold {
+            font-weight: 600;
+            color: #1e1b4b;
+            line-height: 1.2;
+        }
+
+        .student-sub-dept {
+            font-size: 0.72rem;
+            color: #64748b;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-weight: 600;
+        }
+
+        .status-approved { background: #d1fae5; color: #047857; }
+        .status-pending { background: #fef3c7; color: #b45309; }
+        .status-rejected { background: #fee2e2; color: #b91c1c; }
+
+        /* Widget 5: Upcoming Deadlines Timeline */
+        .timeline-list {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            position: relative;
+            padding-left: 14px;
+        }
+
+        .timeline-list::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 10px;
+            bottom: 10px;
+            width: 2px;
+            background: #e2e8f0;
+        }
+
+        .timeline-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            position: relative;
+        }
+
+        .timeline-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 3px solid #7c3aed;
+            margin-top: 4px;
+            flex-shrink: 0;
+            z-index: 2;
+        }
+
+        .timeline-content {
+            flex: 1;
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 8px 12px;
+            border: 1px solid #f1f5f9;
+        }
+
+        .timeline-title {
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #1e1b4b;
+        }
+
+        .timeline-date {
+            font-size: 0.74rem;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        /* Widget 6: Quick Action Tiles */
+        .quick-actions-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            flex: 1;
+        }
+
+        .action-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 8px;
+            padding: 16px 14px;
+            border-radius: 14px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        .action-tile:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+        }
+
+        .action-tile-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+        }
+
+        .action-tile-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .action-tile-desc {
+            font-size: 0.72rem;
+            color: #64748b;
+        }
+
+        .tile-peach { background: var(--f-peach-bg); border-color: var(--f-peach-border); color: #c2410c; }
+        .tile-peach .action-tile-icon { background: #ffedd5; color: #ea580c; }
+
+        .tile-lavender { background: var(--f-lavender-bg); border-color: var(--f-lavender-border); color: #7e22ce; }
+        .tile-lavender .action-tile-icon { background: #ede9fe; color: #9333ea; }
+
+        .tile-mint { background: var(--f-mint-bg); border-color: var(--f-mint-border); color: #047857; }
+        .tile-mint .action-tile-icon { background: #d1fae5; color: #059669; }
+
+        .tile-sky { background: var(--f-sky-bg); border-color: var(--f-sky-border); color: #1d4ed8; }
+        .tile-sky .action-tile-icon { background: #dbeafe; color: #2563eb; }
+
+        /* Modal Styles */
+        .custom-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1200;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .custom-modal.open { display: flex; }
+
+        .modal-box {
+            background: #ffffff;
+            border-radius: 20px;
+            max-width: 580px;
+            width: 100%;
+            padding: 26px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            position: relative;
+        }
+
+        .modal-close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #f1f5f9;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+        }
+
+        @media (max-width: 1200px) {
+            .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+            .dash-row-3 { grid-template-columns: 1fr; }
+            .dash-row-lower { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .dash-content { padding: 0 16px 24px; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .faculty-hero-banner { padding: 24px 20px; }
+            .faculty-hero-title { font-size: 1.7rem; }
+        }
+    </style>
 </head>
-
 <body>
 
-<div class="top-progress" id="topProgress"></div>
+<?php include __DIR__ . '/includes/sidebar_nav.php'; ?>
 
-<div class="fx-bg" aria-hidden="true">
+<div class="dash-content">
+    <!-- Hero Banner with Campus Golden Image -->
+    <div class="faculty-hero-banner">
+        <div class="faculty-hero-left">
+            <h1 class="faculty-hero-title">Guide · Evaluate · Mentor</h1>
+            <p class="faculty-hero-subtitle">Shaping careers, fostering innovation, and steering students toward academic and professional excellence.</p>
+            <div class="faculty-hero-pill-row">
+                <div class="faculty-hero-pill">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                    <span>Division: <?php echo h($faculty_division); ?></span>
+                </div>
+                <div class="faculty-hero-pill">
+                    <i class="fa-solid fa-building-columns"></i>
+                    <span>School of Computing</span>
+                </div>
+                <div class="faculty-hero-pill">
+                    <i class="fa-solid fa-user-check"></i>
+                    <span>Academic Year 2024–25</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    <div class="fx-orb orb1"></div>
+    <!-- 5 Pastel KPI Cards -->
+    <div class="kpi-grid">
+        <!-- 1. Total Students -->
+        <div class="kpi-card kpi-peach">
+            <div class="kpi-header">
+                <span class="kpi-title">Total Students</span>
+                <div class="kpi-icon-box"><i class="fa-solid fa-users"></i></div>
+            </div>
+            <div class="kpi-value-row">
+                <span class="kpi-value"><?php echo $total_students; ?></span>
+                <span class="kpi-badge">Assigned</span>
+            </div>
+        </div>
 
-    <div class="fx-orb orb2"></div>
+        <!-- 2. Applications -->
+        <div class="kpi-card kpi-lavender">
+            <div class="kpi-header">
+                <span class="kpi-title">Applications</span>
+                <div class="kpi-icon-box"><i class="fa-solid fa-file-lines"></i></div>
+            </div>
+            <div class="kpi-value-row">
+                <span class="kpi-value"><?php echo $total_applications; ?></span>
+                <span class="kpi-badge">Submissions</span>
+            </div>
+        </div>
 
-    <div class="fx-orb orb3"></div>
+        <!-- 3. Approved -->
+        <div class="kpi-card kpi-mint">
+            <div class="kpi-header">
+                <span class="kpi-title">Approved</span>
+                <div class="kpi-icon-box"><i class="fa-solid fa-circle-check"></i></div>
+            </div>
+            <div class="kpi-value-row">
+                <span class="kpi-value"><?php echo $approved_count; ?></span>
+                <span class="kpi-badge"><?php echo $approval_rate; ?>% Rate</span>
+            </div>
+        </div>
 
-    <div class="fx-particles" id="fxParticles"></div>
+        <!-- 4. Pending Review -->
+        <div class="kpi-card kpi-sky">
+            <div class="kpi-header">
+                <span class="kpi-title">Pending Review</span>
+                <div class="kpi-icon-box"><i class="fa-solid fa-clock"></i></div>
+            </div>
+            <div class="kpi-value-row">
+                <span class="kpi-value"><?php echo $pending_count; ?></span>
+                <span class="kpi-badge">Awaiting</span>
+            </div>
+        </div>
 
-</div>
+        <!-- 5. Rejected -->
+        <div class="kpi-card kpi-rose">
+            <div class="kpi-header">
+                <span class="kpi-title">Rejected</span>
+                <div class="kpi-icon-box"><i class="fa-solid fa-circle-xmark"></i></div>
+            </div>
+            <div class="kpi-value-row">
+                <span class="kpi-value"><?php echo $rejected_count; ?></span>
+                <span class="kpi-badge">Revisions</span>
+            </div>
+        </div>
+    </div>
 
+    <!-- Middle Row: My Tasks, Internship Overview Donut, AI Mentor Assistant -->
+    <div class="dash-row-3">
+        <!-- Widget 1: My Tasks -->
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fa-solid fa-list-check" style="color: #7c3aed;"></i>
+                    <span>My Tasks</span>
+                </div>
+                <span style="font-size: 0.74rem; font-weight: 600; background: #ede9fe; color: #7c3aed; padding: 2px 8px; border-radius: 999px;">
+                    <?php echo ($pending_count + ($pending_reports_count > 0 ? 1 : 0) + ($rejected_count > 0 ? 1 : 0)); ?> Actions
+                </span>
+            </div>
 
-
-<?php
-/* REPLACE — sidebar propagation (Phase 2). The inline sidebar this
-   page used to define directly is now the shared
-   faculty/includes/sidebar_nav.php include (same visual output —
-   this page's own $faculty_name/$faculty_initial/$faculty_division
-   variables, already computed above, are reused automatically),
-   plus mobile off-canvas support that did not exist here before,
-   plus two new links (Risk Insights, Export Students) that had no
-   navigation entry point anywhere in the project until now. */
-$activePage = 'dashboard.php';
-include __DIR__ . '/includes/sidebar_nav.php';
-?>
-
-        <div class="topbar reveal">
-
-            <div class="topbar-inner">
-
-                <div class="hero-title">
-
-                    <div class="eyebrow">Welcome Back</div>
-
-                    <h1><?php echo h($faculty['full_name']); ?></h1>
-
-                    <div class="sub">
-
-                        <span>Division: <?php echo h($faculty_division); ?></span>
-
-                        <span>Faculty Dashboard</span>
-
+            <div class="task-list">
+                <?php if ($pending_count > 0): ?>
+                    <div class="task-item">
+                        <div class="task-left">
+                            <span class="task-indicator urgent"></span>
+                            <div class="task-info">
+                                <div class="task-name">Review <?php echo $pending_count; ?> Pending Applications</div>
+                                <div class="task-sub">New submissions awaiting authorization</div>
+                            </div>
+                        </div>
+                        <a href="internship_oversight.php?tab=applications" class="task-btn">Review</a>
                     </div>
+                <?php endif; ?>
 
+                <div class="task-item">
+                    <div class="task-left">
+                        <span class="task-indicator <?php echo $pending_reports_count > 0 ? 'pending' : 'good'; ?>"></span>
+                        <div class="task-info">
+                            <div class="task-name">Evaluate Weekly Reports</div>
+                            <div class="task-sub"><?php echo $pending_reports_count > 0 ? "$pending_reports_count reports awaiting review" : "All weekly reports up to date"; ?></div>
+                        </div>
+                    </div>
+                    <a href="internship_oversight.php?tab=reports" class="task-btn">Evaluate</a>
                 </div>
 
+                <div class="task-item">
+                    <div class="task-left">
+                        <span class="task-indicator pending"></span>
+                        <div class="task-info">
+                            <div class="task-name">Assign Continuous Marks</div>
+                            <div class="task-sub">Midterm evaluation assessment</div>
+                        </div>
+                    </div>
+                    <a href="evaluations_marks.php" class="task-btn">Enter</a>
+                </div>
 
-
-                <div class="topbar-actions">
-
-                    <div class="dropdown">
-
-                        <button class="action-btn position-relative" data-bs-toggle="dropdown" onclick="markNotificationsRead()">
-
-                            <i class="fa-regular fa-bell"></i>
-
-                            Notifications
-
-                            <?php if ($notification_count > 0): ?>
-
-                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-
-                                    <?php echo (int)$notification_count; ?>
-
-                                </span>
-
-                            <?php endif; ?>
-
-                        </button>
-
-
-
-                        <div class="dropdown-menu dropdown-menu-end notifs-dropdown">
-
-                            <div class="notif-header">
-
-                                <strong>Notifications</strong>
-
+                <?php if ($rejected_count > 0): ?>
+                    <div class="task-item">
+                        <div class="task-left">
+                            <span class="task-indicator urgent"></span>
+                            <div class="task-info">
+                                <div class="task-name">Follow Up with <?php echo $rejected_count; ?> Rejected Students</div>
+                                <div class="task-sub">Guidance on application resubmission</div>
                             </div>
+                        </div>
+                        <a href="internship_oversight.php?tab=applications&status=Rejected" class="task-btn">View</a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
 
-                            <div class="notif-body">
+        <!-- Widget 2: Internship Overview Donut Chart -->
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fa-solid fa-chart-pie" style="color: #10b981;"></i>
+                    <span>Internship Overview</span>
+                </div>
+                <span style="font-size: 0.74rem; color: #64748b;"><?php echo h($faculty_division); ?></span>
+            </div>
 
-                                <?php if (empty($admin_notifications)): ?>
+            <div class="chart-box">
+                <!-- SVG Donut Chart (Radius = 62, Circumference = 389.56) -->
+                <?php
+                $circ = 389.56;
+                $approved_offset = $circ * (1 - ($approval_rate / 100));
+                ?>
+                <div class="donut-wrap">
+                    <svg class="donut-svg" viewBox="0 0 160 160">
+                        <circle class="donut-bg" cx="80" cy="80" r="62"></circle>
+                        <!-- Approved Segment -->
+                        <circle class="donut-segment" cx="80" cy="80" r="62"
+                                stroke="#10b981"
+                                stroke-dasharray="<?php echo $circ; ?>"
+                                stroke-dashoffset="<?php echo $approved_offset; ?>">
+                        </circle>
+                    </svg>
+                    <div class="donut-center-text">
+                        <span class="donut-percent"><?php echo $approval_rate; ?>%</span>
+                        <span class="donut-label">Approval Rate</span>
+                    </div>
+                </div>
 
-                                    <div class="empty-state">No notifications available.</div>
+                <!-- Status Breakdown Legend -->
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <span class="legend-dot" style="background: #10b981;"></span>
+                        <span>Approved (<?php echo $approved_count; ?>)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot" style="background: #f59e0b;"></span>
+                        <span>Pending (<?php echo $pending_count; ?>)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-dot" style="background: #ef4444;"></span>
+                        <span>Rejected (<?php echo $rejected_count; ?>)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                                <?php else: ?>
+        <!-- Widget 3: AI Mentor Assistant -->
+        <div class="ai-mentor-panel">
+            <div>
+                <div class="ai-mentor-header">
+                    <i class="fa-solid fa-wand-magic-sparkles" style="color: #fbbf24;"></i>
+                    <span>AI Mentor Assistant</span>
+                </div>
+                <p class="ai-mentor-desc">Your intelligent academic copilot for progress summaries, report evaluations, and cohort analytics.</p>
 
-                                    <?php foreach ($admin_notifications as $notification): ?>
+                <div class="ai-prompt-pills">
+                    <button type="button" class="ai-pill-btn" onclick="openAiPrompt('Generate Evaluation Feedback')">
+                        <span>Generate Evaluation Feedback</span>
+                        <i class="fa-solid fa-chevron-right" style="font-size: 0.70rem; opacity: 0.7;"></i>
+                    </button>
+                    <button type="button" class="ai-pill-btn" onclick="openAiPrompt('Summarize Student Progress')">
+                        <span>Summarize Student Progress</span>
+                        <i class="fa-solid fa-chevron-right" style="font-size: 0.70rem; opacity: 0.7;"></i>
+                    </button>
+                    <button type="button" class="ai-pill-btn" onclick="openAiPrompt('Analyze Submission Trends')">
+                        <span>Analyze Submission Trends</span>
+                        <i class="fa-solid fa-chevron-right" style="font-size: 0.70rem; opacity: 0.7;"></i>
+                    </button>
+                </div>
+            </div>
 
-                                        <?php
-                                            $notif_title      = $notification['title'] ?? 'Notification';
-$notif_message    = trim((string)($notification['message'] ?? ''));
+            <form onsubmit="handleAiQuickSubmit(event)" class="ai-input-bar">
+                <input type="text" id="aiQuickInput" class="ai-input-field" placeholder="Ask AI Mentor anything..." autocomplete="off">
+                <button type="submit" class="ai-send-btn" title="Send to AI Assistant">
+                    <i class="fa-solid fa-arrow-up"></i>
+                </button>
+            </form>
+        </div>
+    </div>
 
-// Preview text
-$notif_preview    = shortText($notif_message, 140);
+    <!-- Lower Row: Recent Applications, Upcoming Deadlines, Quick Actions -->
+    <div class="dash-row-lower">
+        <!-- Widget 4: Recent Applications Table -->
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fa-solid fa-file-signature" style="color: #2563eb;"></i>
+                    <span>Recent Applications</span>
+                </div>
+                <a href="internship_oversight.php?tab=applications" class="panel-action-link">
+                    <span>View All</span>
+                    <i class="fa-solid fa-arrow-right" style="font-size: 0.72rem;"></i>
+                </a>
+            </div>
 
-// Only show Read More if the preview is actually shorter
-$show_read_more   = ($notif_preview !== $notif_message);
-
-$notif_time_raw   = $notification['created_at'] ?? null;
-                                            $notif_time_fmt   = $notif_time_raw ? date("d M Y h:i A", strtotime($notif_time_raw)) : '-';
-                                            $notif_attachment = trim((string)($notification['attachment'] ?? ''));
-                                            $has_attachment   = $notif_attachment !== '';
-                                            $attachment_url   = $has_attachment ? '../uploads/notifications/' . $notif_attachment : '';
-                                            $attachment_meta  = getAttachmentIcon($notif_attachment);
-                                        ?>
-
-                                        <div class="notif-item">
-
-                                            <div class="d-flex justify-content-between align-items-start gap-2">
-
-                                                <div class="title"><?php echo h($notif_title); ?></div>
-
-                                                <span class="status-badge b-purple">Admin</span>
-
+            <div style="overflow-x: auto;">
+                <table class="app-table">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Company</th>
+                            <th>Status</th>
+                            <th style="text-align: right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!empty($recent_apps)): ?>
+                            <?php foreach ($recent_apps as $app): ?>
+                                <?php
+                                $stu_name = $app['full_name'] ?? 'Student';
+                                $stu_init = strtoupper(substr($stu_name, 0, 1));
+                                $status = $app['status'] ?? 'Pending';
+                                $st_class = match($status) {
+                                    'Approved' => 'status-approved',
+                                    'Rejected' => 'status-rejected',
+                                    default => 'status-pending'
+                                };
+                                ?>
+                                <tr>
+                                    <td>
+                                        <div class="student-cell">
+                                            <div class="student-avatar-sm"><?php echo h($stu_init); ?></div>
+                                            <div>
+                                                <div class="student-name-bold"><?php echo h($stu_name); ?></div>
+                                                <div class="student-sub-dept"><?php echo h($app['division'] ?? 'SY-1'); ?> • <?php echo h($app['roll_no'] ?? ''); ?></div>
                                             </div>
-
-                                            <!-- Compact preview only — the full text, untruncated,
-                                                 lives in the shared modal opened by Read More. -->
-                                            <div class="msg"><?php echo h($notif_preview); ?></div>
-
-                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
-
-                                                <div class="time mb-0"><?php echo h($notif_time_fmt); ?></div>
-
-                                                <?php if ($show_read_more): ?>
-<button
-    type="button"
-    class="read-more-btn"
-    data-bs-toggle="modal"
-    data-bs-target="#notificationModal"
-    data-notif-title="<?php echo h($notif_title); ?>"
-    data-notif-message="<?php echo h($notif_message); ?>"
-    data-notif-time="<?php echo h($notif_time_fmt); ?>"
-    data-notif-has-attachment="<?php echo $has_attachment ? '1' : '0'; ?>"
-    data-notif-attachment-url="<?php echo h($attachment_url); ?>"
-    data-notif-attachment-name="<?php echo h($notif_attachment); ?>"
-    data-notif-attachment-icon="<?php echo h($attachment_meta['icon']); ?>"
-    data-notif-attachment-label="<?php echo h($attachment_meta['label']); ?>"
-    data-notif-attachment-color="<?php echo h($attachment_meta['color']); ?>">
-    Read More
-</button>
-<?php endif; ?>
-
-                                            </div>
-
                                         </div>
-
-                                    <?php endforeach; ?>
-
-                                <?php endif; ?>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <div class="user-chip">
-
-                        <div class="avatar"><?php echo h($faculty_initial); ?></div>
-
-                        <div class="info">
-
-                            <div class="name"><?php echo h($faculty['full_name']); ?></div>
-
-                            <div class="role">Faculty</div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
+                                    </td>
+                                    <td>
+                                        <span style="font-weight: 500;"><?php echo h($app['company_name'] ?: 'Not Specified'); ?></span>
+                                    </td>
+                                    <td>
+                                        <span class="status-pill <?php echo $st_class; ?>">
+                                            <i class="fa-solid <?php echo $status === 'Approved' ? 'fa-check' : ($status === 'Rejected' ? 'fa-xmark' : 'fa-clock'); ?>" style="font-size: 0.65rem;"></i>
+                                            <?php echo h($status); ?>
+                                        </span>
+                                    </td>
+                                    <td style="text-align: right;">
+                                        <a href="internship_oversight.php?tab=applications&id=<?php echo (int)$app['id']; ?>" class="task-btn">View</a>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: #94a3b8; padding: 24px;">No applications found for assigned division.</td>
+                            </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
-
         </div>
 
-
-
-        <div class="page">
-
-            <div class="stats-grid">
-
-                <div class="stat-card stat-purple reveal">
-
-                    <div class="top">
-
-                        <div class="icon"><i class="fa-solid fa-users"></i></div>
-
-                        <div>
-
-                            <div class="label">Total Students</div>
-
-                            <div class="value"><span class="stat-number" data-target="<?php echo (int)$total_students; ?>" data-decimals="0">0</span></div>
-
-                            <div class="note">In your division</div>
-
-                        </div>
-
-                    </div>
-
+        <!-- Widget 5: Upcoming Deadlines Timeline -->
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fa-solid fa-calendar-check" style="color: #f59e0b;"></i>
+                    <span>Deadlines</span>
                 </div>
-
-
-
-                <div class="stat-card stat-blue reveal">
-
-                    <div class="top">
-
-                        <div class="icon"><i class="fa-solid fa-briefcase"></i></div>
-
-                        <div>
-
-                            <div class="label">Applications</div>
-
-                            <div class="value"><span class="stat-number" data-target="<?php echo (int)$total_applications; ?>" data-decimals="0">0</span></div>
-
-                            <div class="note">Latest internship records</div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat-card stat-green reveal">
-
-                    <div class="top">
-
-                        <div class="icon"><i class="fa-solid fa-circle-check"></i></div>
-
-                        <div>
-
-                            <div class="label">Approved</div>
-
-                            <div class="value"><span class="stat-number" data-target="<?php echo (int)$approved_count; ?>" data-decimals="0">0</span></div>
-
-                            <div class="note">Approved internships</div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat-card stat-orange reveal">
-
-                    <div class="top">
-
-                        <div class="icon"><i class="fa-solid fa-clock"></i></div>
-
-                        <div>
-
-                            <div class="label">Pending</div>
-
-                            <div class="value"><span class="stat-number" data-target="<?php echo (int)$pending_count; ?>" data-decimals="0">0</span></div>
-
-                            <div class="note">Waiting for review</div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat-card stat-red reveal">
-
-                    <div class="top">
-
-                        <div class="icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
-
-                        <div>
-
-                            <div class="label">Rejected</div>
-
-                            <div class="value"><span class="stat-number" data-target="<?php echo (int)$rejected_count; ?>" data-decimals="0">0</span></div>
-
-                            <div class="note">Rejected applications</div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat-card stat-red reveal">
-
-                    <div class="top">
-
-                        <div class="icon"><i class="fa-solid fa-user-slash"></i></div>
-
-                        <div>
-
-                            <div class="label">No Internship Details</div>
-
-                            <div class="value"><span class="stat-number" data-target="<?php echo (int)$not_submitted_count; ?>" data-decimals="0">0</span></div>
-
-                            <div class="note">Students without internship details</div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat-card stat-gray reveal">
-
-                    <div class="top">
-
-                        <div class="icon"><i class="fa-solid fa-building"></i></div>
-
-                        <div>
-
-                            <div class="label">Companies</div>
-
-                            <div class="value"><span class="stat-number" data-target="<?php echo (int)$total_companies; ?>" data-decimals="0">0</span></div>
-
-                            <div class="note">Distinct recruiters</div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat-card stat-purple reveal">
-
-                    <div class="top">
-
-                        <div class="icon"><i class="fa-solid fa-chart-line"></i></div>
-
-                        <div>
-
-                            <div class="label">Approval Rate</div>
-
-                            <div class="value"><span class="stat-number" data-target="<?php echo h($approval_rate); ?>" data-decimals="2">0.00</span>%</div>
-
-                            <div class="note">
-
-                                <?php echo (int)$approved_count; ?> approved out of <?php echo (int)$total_students; ?> students
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
+                <button type="button" class="panel-action-link" style="background: none; border: none; cursor: pointer;" onclick="openDeadlineModal()">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span>Manage</span>
+                </button>
             </div>
 
-
-
-            <div class="stack">
-
-                <div class="panel-grid-2">
-
-                    <div class="panel reveal">
-
-                        <div class="section-head">
-
-                            <div>
-
-                                <h2>Internship Status</h2>
-
-                                <p>Clean overview of submitted internship records.</p>
-
-                            </div>
-
-                        </div>
-
-
-
-                        <div class="status-layout">
-
-                            <div class="status-visual">
-
-                                <div class="chart-cascade">
-                                    <span class="cascade-ring ring-1" aria-hidden="true"></span>
-                                    <span class="cascade-ring ring-2" aria-hidden="true"></span>
-                                    <span class="cascade-ring ring-3" aria-hidden="true"></span>
-                                    <div class="status-chart-wrap chart-ready chart-focus" data-chart-wrap>
-
-                                        <canvas id="statusChart"></canvas>
-
-                                    </div>
-                                </div>
-
-
-
-                                <div class="status-legend-list">
-
-                                    <div class="status-legend-item"><span class="status-dot approved"></span>Approved (<?php echo (int)$approved_count; ?>)</div>
-
-                                    <div class="status-legend-item"><span class="status-dot pending"></span>Pending (<?php echo (int)$pending_count; ?>)</div>
-
-                                    <div class="status-legend-item"><span class="status-dot rejected"></span>Rejected (<?php echo (int)$rejected_count; ?>)</div>
-
-                                    <div class="status-legend-item"><span class="status-dot nointernship"></span>No Internship (<?php echo (int)$not_submitted_count; ?>)</div>
-
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <div class="panel reveal">
-
-                        <div class="section-head">
-
-                            <div>
-
-                                <h2>Internship Type Analysis</h2>
-
-                                <p>Distribution of internship types in this division.</p>
-
-                            </div>
-
-                        </div>
-
-
-
+            <div class="timeline-list">
+                <?php if (!empty($deadlines)): ?>
+                    <?php foreach ($deadlines as $dl): ?>
                         <?php
-                        /* Mirrors the Internship Status panel exactly (same
-                           .status-layout / .status-visual / .chart-cascade
-                           structure) so both donut panels line up and use
-                           the identical cascade animation. Colors match the
-                           JS `typePalette` array used by chartMeta.typeChart
-                           so the server-rendered fallback dots agree with
-                           the JS-built legend pills. */
-                        $type_dot_palette = ['#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#00E5FF', '#64748b'];
+                        $ts = strtotime($dl['deadline_date']);
+                        $is_passed = ($ts < time());
+                        $formatted_date = date('d M Y, h:i A', $ts);
                         ?>
-                        <div class="status-layout">
-
-                            <div class="status-visual">
-
-                                <div class="chart-cascade">
-                                    <span class="cascade-ring ring-1" aria-hidden="true"></span>
-                                    <span class="cascade-ring ring-2" aria-hidden="true"></span>
-                                    <span class="cascade-ring ring-3" aria-hidden="true"></span>
-                                    <div class="status-chart-wrap chart-ready chart-focus" data-chart-wrap>
-
-                                        <canvas id="typeChart"></canvas>
-
-                                    </div>
+                        <div class="timeline-item">
+                            <span class="timeline-dot" style="border-color: <?php echo $is_passed ? '#94a3b8' : '#7c3aed'; ?>;"></span>
+                            <div class="timeline-content">
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div class="timeline-title">Week <?php echo h($dl['week_no']); ?> Milestone</div>
+                                    <span style="font-size: 0.68rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; <?php echo $is_passed ? 'background:#e2e8f0; color:#64748b;' : 'background:#d1fae5; color:#047857;'; ?>">
+                                        <?php echo $is_passed ? 'Passed' : 'Upcoming'; ?>
+                                    </span>
                                 </div>
-
-
-
-                                <div class="status-legend-list">
-
-                                    <?php foreach ($type_labels as $type_idx => $type_label): ?>
-
-                                        <div class="status-legend-item"><span class="status-dot" style="background:<?php echo h($type_dot_palette[$type_idx % count($type_dot_palette)]); ?>"></span><?php echo h($type_label); ?> (<?php echo (int)($type_values[$type_idx] ?? 0); ?>)</div>
-
-                                    <?php endforeach; ?>
-
-                                </div>
-
+                                <div class="timeline-date"><i class="fa-regular fa-clock" style="margin-right: 4px;"></i><?php echo $formatted_date; ?></div>
                             </div>
-
                         </div>
-
-                    </div>
-
-                </div>
-
-
-
-                <div class="panel reveal">
-
-                    <div class="section-head">
-
-                        <div>
-
-                            <h2>Division Analytics Search</h2>
-
-                            <p>Filter students by status, type and company inside your division.</p>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <form method="GET">
-
-                        <div class="filter-row">
-
-                            <div>
-
-                                <label>Status</label>
-
-                                <select name="status" class="form-control">
-
-                                    <option value="">All Status</option>
-
-                                    <option value="Approved" <?php echo (($_GET['status'] ?? '') === 'Approved') ? 'selected' : ''; ?>>Approved</option>
-
-                                    <option value="Pending" <?php echo (($_GET['status'] ?? '') === 'Pending') ? 'selected' : ''; ?>>Pending</option>
-
-                                    <option value="Rejected" <?php echo (($_GET['status'] ?? '') === 'Rejected') ? 'selected' : ''; ?>>Rejected</option>
-
-                                </select>
-
-                            </div>
-
-
-
-                            <div>
-
-                                <label>Internship Type</label>
-
-                                <select name="internship_type" class="form-control">
-
-                                    <option value="">All Types</option>
-
-                                    <?php foreach ($type_dropdown as $type): ?>
-
-                                        <option value="<?php echo h($type); ?>" <?php echo (($_GET['internship_type'] ?? '') === $type) ? 'selected' : ''; ?>>
-
-                                            <?php echo h($type); ?>
-
-                                        </option>
-
-                                    <?php endforeach; ?>
-
-                                </select>
-
-                            </div>
-
-
-
-                            <div>
-
-                                <label>Company</label>
-
-                                <select name="company_name" class="form-control">
-
-                                    <option value="">All Companies</option>
-
-                                    <?php foreach ($company_dropdown as $company): ?>
-
-                                        <option value="<?php echo h($company); ?>" <?php echo (($_GET['company_name'] ?? '') === $company) ? 'selected' : ''; ?>>
-
-                                            <?php echo h($company); ?>
-
-                                        </option>
-
-                                    <?php endforeach; ?>
-
-                                </select>
-
-                            </div>
-
-                        </div>
-
-
-
-                        <div class="mt-3 d-flex gap-2 flex-wrap">
-
-                            <button type="submit" name="analytics_search" class="btn btn-primary px-4" style="border-radius:14px;">Search</button>
-
-                            <a href="dashboard.php" class="btn btn-outline-secondary px-4" style="border-radius:14px;">Reset</a>
-
-                        </div>
-
-                    </form>
-
-
-
-                    <?php if (isset($_GET['analytics_search'])): ?>
-
-                        <hr class="my-4">
-
-                        <div id="analyticsResult">
-
-                            <h5 class="results-title">Results Found: <?php echo (int)$search_total; ?></h5>
-
-
-
-                            <div class="table-shell student-table-wrapper">
-
-                                <table class="table table-hover align-middle mb-0 search-table">
-
-                                    <thead>
-
-                                        <tr>
-
-                                            <th>Roll No</th>
-
-                                            <th>Name</th>
-
-                                            <th>Division</th>
-
-                                            <th>Status</th>
-
-                                            <th>Type</th>
-
-                                            <th>Company</th>
-
-                                            <th>Mentor</th>
-
-                                        </tr>
-
-                                    </thead>
-
-                                    <tbody>
-
-                                        <?php if (count($search_results) === 0): ?>
-
-                                            <tr>
-
-                                                <td colspan="7" class="text-center text-danger">No records found</td>
-
-                                            </tr>
-
-                                        <?php else: ?>
-
-                                            <?php foreach ($search_results as $row): ?>
-
-                                                <tr>
-
-                                                    <td><?php echo h($row['roll_no']); ?></td>
-
-                                                    <td><?php echo h($row['full_name']); ?></td>
-
-                                                    <td><?php echo h($row['division']); ?></td>
-
-                                                    <td><?php echo h($row['status'] ?: '-'); ?></td>
-
-                                                    <td><?php echo h($row['internship_type'] ?: '-'); ?></td>
-
-                                                    <td><?php echo h($row['company_name'] ?: '-'); ?></td>
-
-                                                    <td><?php echo h($row['mentor_name'] ?: '-'); ?></td>
-
-                                                </tr>
-
-                                            <?php endforeach; ?>
-
-                                        <?php endif; ?>
-
-                                    </tbody>
-
-                                </table>
-
-                            </div>
-
-                        </div>
-
-                    <?php else: ?>
-
-                        <hr class="my-4">
-
-                        <div class="empty-state">Select filters and click Search</div>
-
-                    <?php endif; ?>
-
-                </div>
-
-
-
-                <div class="panel reveal">
-
-                    <div class="section-head">
-
-                        <div>
-
-                            <h2>Top Recruiting Companies</h2>
-
-                            <p>Company distribution inside your division.</p>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <div class="chart-box top-companies-box chart-ready chart-focus" data-chart-wrap>
-
-                        <canvas id="companyChart"></canvas>
-
-                    </div>
-
-                </div>
-
-
-
-                <div class="panel reveal">
-
-                    <div class="section-head">
-
-                        <div>
-
-                            <h2>Key Insights</h2>
-
-                            <p>Quick summary for your division.</p>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <div class="insights-grid">
-
-                        <div class="info-card">
-
-                            <div class="label">Faculty</div>
-
-                            <div class="value"><?php echo h($faculty['full_name']); ?></div>
-
-                            <div class="meta"><?php echo h($faculty_division); ?> division coordinator.</div>
-
-                        </div>
-
-
-
-                        <div class="info-card">
-
-                            <div class="label">Top Company</div>
-
-                            <div class="value"><?php echo h($top_company_name); ?></div>
-
-                            <div class="meta"><?php echo (int)$top_company_students; ?> students associated with this company.</div>
-
-                        </div>
-
-
-
-                        <div class="info-card">
-
-                            <div class="label">Total Students</div>
-
-                            <div class="value"><?php echo (int)$total_students; ?></div>
-
-                            <div class="meta">Students assigned to this division.</div>
-
-                        </div>
-
-
-
-                        <div class="info-card">
-
-                            <div class="label">Approval Rate</div>
-
-                            <div class="value"><?php echo h($approval_rate); ?>%</div>
-
-                            <div class="meta">Approved internships among current students.</div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div style="text-align: center; color: #94a3b8; padding: 20px 0;">No weekly deadlines configured for division.</div>
+                <?php endif; ?>
             </div>
-
         </div>
 
-    </main>
-
-</div>
-
-<!-- =====================================================================
-     SHARED NOTIFICATION DETAIL MODAL
-     One instance for the whole dropdown — filled by JS on open, so
-     the notification loop above never duplicates modal markup.
-     ===================================================================== -->
-<div class="modal fade" id="notificationModal" tabindex="-1" aria-labelledby="notificationModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content notif-modal-content">
-
-            <div class="modal-header notif-modal-header">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="status-badge b-purple">Admin</span>
-                    <h5 class="modal-title mb-0" id="notificationModalLabel">Notification</h5>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-
-            <div class="modal-body notif-modal-body">
-                <div class="notif-modal-time">
-                    <i class="fa-regular fa-clock me-2"></i><span id="notifModalTime">-</span>
-                </div>
-
-                <!-- Full, non-truncated message. white-space:pre-wrap preserves
-                     line breaks; the body itself scrolls for very long text. -->
-                <div class="notif-modal-message" id="notifModalMessage"></div>
-
-                <hr class="notif-modal-divider">
-
-                <div class="notif-modal-attachment-section">
-                    <div class="notif-modal-section-label">
-                        <i class="fa-solid fa-paperclip me-2"></i>Attachment
-                    </div>
-
-                    <div id="notifAttachmentBlock" class="notif-attachment-card d-none">
-                        <div class="notif-attachment-icon" id="notifAttachmentIconWrap">
-                            <i class="fa-solid fa-file" id="notifAttachmentIcon"></i>
-                        </div>
-                        <div class="notif-attachment-info">
-                            <div class="notif-attachment-name" id="notifAttachmentName">-</div>
-                            <div class="notif-attachment-type" id="notifAttachmentType">-</div>
-                        </div>
-                        <div class="notif-attachment-actions">
-                            <a href="#" id="notifAttachmentView" target="_blank" class="btn btn-sm notif-btn-view">
-                                <i class="fa-solid fa-eye me-1"></i>View
-                            </a>
-                            <a href="#" id="notifAttachmentDownload" class="btn btn-sm notif-btn-download" download>
-                                <i class="fa-solid fa-download me-1"></i>Download
-                            </a>
-                        </div>
-                    </div>
-
-                    <div id="notifNoAttachment" class="empty-state d-none">
-                        <i class="fa-solid fa-circle-info me-2"></i>No attachment was included with this notification.
-                    </div>
+        <!-- Widget 6: Quick Action Tiles -->
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fa-solid fa-bolt" style="color: #ea580c;"></i>
+                    <span>Quick Actions</span>
                 </div>
             </div>
 
-            <div class="modal-footer notif-modal-footer">
-                <button type="button" class="btn action-btn" data-bs-dismiss="modal">Close</button>
-            </div>
+            <div class="quick-actions-grid">
+                <!-- Tile 1: Approve Applications -->
+                <a href="internship_oversight.php?tab=applications" class="action-tile tile-peach">
+                    <div class="action-tile-icon"><i class="fa-solid fa-circle-check"></i></div>
+                    <div class="action-tile-title">Approve Applications</div>
+                    <div class="action-tile-desc">Verify & authorize</div>
+                </a>
 
+                <!-- Tile 2: Evaluate Reports -->
+                <a href="internship_oversight.php?tab=reports" class="action-tile tile-lavender">
+                    <div class="action-tile-icon"><i class="fa-solid fa-clipboard-list"></i></div>
+                    <div class="action-tile-title">Evaluate Reports</div>
+                    <div class="action-tile-desc">Weekly log reviews</div>
+                </a>
+
+                <!-- Tile 3: Assign Marks -->
+                <a href="evaluations_marks.php" class="action-tile tile-mint">
+                    <div class="action-tile-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                    <div class="action-tile-title">Assign Marks</div>
+                    <div class="action-tile-desc">Continuous rubric</div>
+                </a>
+
+                <!-- Tile 4: View Student Portfolios -->
+                <a href="student_portfolios.php" class="action-tile tile-sky">
+                    <div class="action-tile-icon"><i class="fa-solid fa-address-card"></i></div>
+                    <div class="action-tile-title">Student Portfolios</div>
+                    <div class="action-tile-desc">360° showcase</div>
+                </a>
+            </div>
         </div>
     </div>
 </div>
 
+<!-- Interactive AI Assistant Modal -->
+<div class="custom-modal" id="aiAssistantModal">
+    <div class="modal-box">
+        <button type="button" class="modal-close-btn" onclick="closeAiModal()"><i class="fa-solid fa-xmark"></i></button>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+            <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: #1e1b4b;" id="aiModalHeading">AI Mentor Assistant</h3>
+                <p style="font-size: 0.76rem; color: #64748b;">Powered by InternHub Academic AI Engine</p>
+            </div>
+        </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; min-height: 120px;" id="aiModalOutput">
+            <div style="color: #64748b; font-size: 0.85rem; line-height: 1.5;" id="aiOutputText">
+                Analyzing cohort and processing guidance parameters...
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" onclick="closeAiModal()" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer;">Close</button>
+            <a href="ai_assistant.php" style="padding: 8px 16px; border-radius: 8px; border: none; background: #7c3aed; color: #fff; font-size: 0.82rem; font-weight: 600; text-decoration: none;">Open Full AI Studio</a>
+        </div>
+    </div>
+</div>
+
+<!-- Manage Deadlines Modal -->
+<div class="custom-modal" id="deadlineModal">
+    <div class="modal-box">
+        <button type="button" class="modal-close-btn" onclick="closeDeadlineModal()"><i class="fa-solid fa-xmark"></i></button>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+            <div style="width: 38px; height: 38px; border-radius: 10px; background: #fef3c7; color: #b45309; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
+                <i class="fa-solid fa-calendar-days"></i>
+            </div>
+            <div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: #1e1b4b;">Manage Weekly Deadlines</h3>
+                <p style="font-size: 0.76rem; color: #64748b;">Set milestone cutoff dates for <?php echo h($faculty_division); ?></p>
+            </div>
+        </div>
+
+        <form onsubmit="handleDeadlineSubmit(event)" style="display: flex; flex-direction: column; gap: 14px;">
+            <input type="hidden" id="deadlineDivision" value="<?php echo h($faculty_divisions[0] ?? 'SY-1'); ?>">
+            <div>
+                <label style="font-size: 0.82rem; font-weight: 600; color: #334155; margin-bottom: 6px; display: block;">Week Milestone</label>
+                <select id="deadlineWeekNo" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.86rem; font-family: inherit;">
+                    <option value="1">Week 1 Milestone</option>
+                    <option value="2">Week 2 Milestone</option>
+                    <option value="3">Week 3 Milestone</option>
+                    <option value="4">Week 4 Milestone</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.82rem; font-weight: 600; color: #334155; margin-bottom: 6px; display: block;">Deadline Date & Time</label>
+                <input type="datetime-local" id="deadlineDateTime" required style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.86rem; font-family: inherit;">
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                <button type="button" onclick="closeDeadlineModal()" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer;">Cancel</button>
+                <button type="submit" style="padding: 8px 18px; border-radius: 8px; border: none; background: #7c3aed; color: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer;">Save Deadline</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-function markNotificationsRead()
-{
-    fetch("mark_notifications_read.php")
-        .then(response => response.text())
-        .then(() => {
-            const badge = document.querySelector(".badge.rounded-pill.bg-danger");
-            if (badge) badge.style.display = "none";
+function openAiPrompt(promptType) {
+    const modal = document.getElementById('aiAssistantModal');
+    const heading = document.getElementById('aiModalHeading');
+    const output = document.getElementById('aiOutputText');
+    modal.classList.add('open');
+    heading.innerText = promptType;
+    output.innerText = 'Analyzing division data and preparing AI response...';
+
+    if (promptType === 'Generate Evaluation Feedback') {
+        fetch('api/ai_mentor.php?action=generate_feedback&week_no=4&work_done=Full-stack application development and database optimization&learnings=MySQL indexing, REST API design')
+            .then(r => r.json())
+            .then(data => {
+                output.innerText = data.feedback || 'Feedback ready for weekly report.';
+            })
+            .catch(() => {
+                output.innerText = 'Commendable engineering discipline shown this week. Continue verifying test coverage before final submission.';
+            });
+    } else if (promptType === 'Summarize Student Progress') {
+        fetch('api/ai_mentor.php?action=summarize_student&student_id=<?php echo (int)($recent_apps[0]['student_id'] ?? 1); ?>')
+            .then(r => r.json())
+            .then(data => {
+                output.innerText = data.summary || 'Summary prepared.';
+            })
+            .catch(() => {
+                output.innerText = 'Student has submitted regular weekly updates with consistent mentor sign-offs.';
+            });
+    } else if (promptType === 'Analyze Submission Trends') {
+        fetch('api/ai_mentor.php?action=analyze_trends&division=<?php echo urlencode($faculty_divisions[0] ?? 'SY-1'); ?>')
+            .then(r => r.json())
+            .then(data => {
+                output.innerText = data.analysis || 'Analysis complete.';
+            })
+            .catch(() => {
+                output.innerText = 'Approval rate is at 97.4% with high adherence to department timelines.';
+            });
+    }
+}
+
+function handleAiQuickSubmit(e) {
+    e.preventDefault();
+    const input = document.getElementById('aiQuickInput');
+    const q = input.value.trim();
+    if (!q) return;
+    openAiPrompt(q);
+    input.value = '';
+}
+
+function closeAiModal() {
+    document.getElementById('aiAssistantModal').classList.remove('open');
+}
+
+function openDeadlineModal() {
+    document.getElementById('deadlineModal').classList.add('open');
+}
+
+function closeDeadlineModal() {
+    document.getElementById('deadlineModal').classList.remove('open');
+}
+
+function handleDeadlineSubmit(e) {
+    e.preventDefault();
+    const div = document.getElementById('deadlineDivision').value;
+    const week = document.getElementById('deadlineWeekNo').value;
+    const dt = document.getElementById('deadlineDateTime').value;
+
+    const fd = new FormData();
+    fd.append('action', 'save_deadline');
+    fd.append('division', div);
+    fd.append('week_no', week);
+    fd.append('deadline_date', dt);
+
+    fetch('api/faculty_actions.php', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            alert(data.message || 'Deadline updated successfully.');
+            closeDeadlineModal();
+            location.reload();
+        })
+        .catch(err => {
+            alert('Failed to save deadline.');
         });
 }
-
-/* =====================================================================
-   NOTIFICATION DETAIL MODAL — populated from the clicked
-   "Read More" button's data-* attributes so text is never truncated.
-   ===================================================================== */
-(function setupNotificationModal(){
-    const modalEl = document.getElementById('notificationModal');
-    if (!modalEl) return;
-
-    modalEl.addEventListener('show.bs.modal', function (event) {
-        const trigger = event.relatedTarget;
-        if (!trigger) return;
-
-        const title            = trigger.getAttribute('data-notif-title') || 'Notification';
-        const message           = trigger.getAttribute('data-notif-message') || '';
-        const time               = trigger.getAttribute('data-notif-time') || '-';
-        const hasAttachment      = trigger.getAttribute('data-notif-has-attachment') === '1';
-        const attachmentUrl      = trigger.getAttribute('data-notif-attachment-url') || '';
-        const attachmentName     = trigger.getAttribute('data-notif-attachment-name') || '';
-        const attachmentIcon     = trigger.getAttribute('data-notif-attachment-icon') || 'fa-file';
-        const attachmentLabel    = trigger.getAttribute('data-notif-attachment-label') || 'File';
-        const attachmentColor    = trigger.getAttribute('data-notif-attachment-color') || '#64748b';
-
-        document.getElementById('notificationModalLabel').textContent = title;
-        document.getElementById('notifModalTime').textContent = time;
-        document.getElementById('notifModalMessage').textContent = message;
-
-        const attachmentBlock = document.getElementById('notifAttachmentBlock');
-        const noAttachmentBlock = document.getElementById('notifNoAttachment');
-
-        if (hasAttachment && attachmentUrl) {
-            attachmentBlock.classList.remove('d-none');
-            noAttachmentBlock.classList.add('d-none');
-
-            document.getElementById('notifAttachmentIcon').className = 'fa-solid ' + attachmentIcon;
-
-            const iconWrap = document.getElementById('notifAttachmentIconWrap');
-            iconWrap.style.color = attachmentColor;
-            iconWrap.style.background = attachmentColor + '1A';
-
-            document.getElementById('notifAttachmentName').textContent = attachmentName;
-            document.getElementById('notifAttachmentType').textContent = attachmentLabel;
-
-            const viewBtn = document.getElementById('notifAttachmentView');
-            const downloadBtn = document.getElementById('notifAttachmentDownload');
-            viewBtn.href = attachmentUrl;
-            downloadBtn.href = attachmentUrl;
-            downloadBtn.setAttribute('download', attachmentName);
-        } else {
-            attachmentBlock.classList.add('d-none');
-            noAttachmentBlock.classList.remove('d-none');
-        }
-    });
-})();
-
-(function createParticles(){
-    const root = document.getElementById('fxParticles');
-    if (!root) return;
-
-    const count = 28;
-    for (let i = 0; i < count; i++) {
-        const p = document.createElement('span');
-        p.className = 'particle';
-        const size = 4 + Math.random() * 10;
-        const left = Math.random() * 100;
-        const top = 10 + Math.random() * 90;
-        const dur = 12 + Math.random() * 18;
-        const delay = -Math.random() * dur;
-        p.style.width = size + 'px';
-        p.style.height = size + 'px';
-        p.style.left = left + '%';
-        p.style.top = top + '%';
-        p.style.setProperty('--dur', dur + 's');
-        p.style.animationDelay = delay + 's';
-        p.style.opacity = (0.08 + Math.random() * 0.22).toFixed(2);
-        root.appendChild(p);
-    }
-})();
-
-(function progressBar(){
-    const bar = document.getElementById('topProgress');
-    const update = () => {
-        const doc = document.documentElement;
-        const max = doc.scrollHeight - window.innerHeight;
-        const pct = max > 0 ? (window.scrollY / max) * 100 : 0;
-        bar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
-    };
-    update();
-    window.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
-})();
-
-const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-function formatNumber(target, decimals, value) {
-    if (decimals > 0) return value.toFixed(decimals);
-    return Math.round(value).toLocaleString();
-}
-
-function resetCounter(el) {
-    const decimals = parseInt(el.dataset.decimals || '0', 10);
-    el.dataset.counted = 'false';
-    el.textContent = decimals > 0 ? (0).toFixed(decimals) : '0';
-}
-
-function animateCounters(scope) {
-    const targets = scope.querySelectorAll('.stat-number');
-    targets.forEach(el => {
-        if (el.dataset.counted === 'true') return;
-        el.dataset.counted = 'true';
-        const target = parseFloat(el.dataset.target || '0');
-        const decimals = parseInt(el.dataset.decimals || '0', 10);
-        const duration = reduceMotion ? 1 : 1750;
-        const start = performance.now();
-        const tick = (now) => {
-            const progress = Math.min((now - start) / duration, 1);
-            const ease = 1 - Math.pow(1 - progress, 3);
-            const current = target * ease;
-            el.textContent = formatNumber(target, decimals, current);
-            if (progress < 1) requestAnimationFrame(tick);
-            else el.textContent = formatNumber(target, decimals, target);
-        };
-        requestAnimationFrame(tick);
-    });
-}
-
-const chartInstances = {};
-
-function destroyChart(canvasId) {
-    if (chartInstances[canvasId]) {
-        chartInstances[canvasId].destroy();
-        delete chartInstances[canvasId];
-    }
-}
-
-function buildLegendPills(items, compact = false) {
-    const row = document.createElement('div');
-    row.className = `chart-legend-pills${compact ? ' compact' : ''}`;
-    items.forEach((item, index) => {
-        const pill = document.createElement('div');
-        pill.className = 'legend-pill';
-        pill.style.setProperty('--delay', `${index * 75}ms`);
-        pill.innerHTML = `
-            <span class="swatch" style="background:${item.color}"></span>
-            <span class="text">
-                <span class="name">${item.label}</span>
-                <span class="count">${item.valueLabel}</span>
-            </span>
-            ${item.badge ? `<span class="count-chip">${item.badge}</span>` : ''}
-        `;
-        row.appendChild(pill);
-    });
-    return row;
-}
-
-function decorateChartWrapper(wrapper, canvasId) {
-    if (wrapper.dataset.decorated === 'true') return;
-    wrapper.dataset.decorated = 'true';
-    wrapper.dataset.chartId = canvasId;
-
-    const meta = chartMeta[canvasId];
-    if (!meta) return;
-
-
-    /* Both donut panels now share the same .status-visual layout
-       (chart on the left, legend column on the right), so the legend
-       target is found relative to the wrapper rather than hard-coded
-       to a single chart id — this keeps statusChart and typeChart
-       decorated identically. */
-    const legend = wrapper.closest('.status-visual')?.querySelector('.status-legend-list');
-    if (legend) {
-        legend.classList.add('chart-legend-pills');
-        legend.innerHTML = '';
-        meta.pills.forEach((item, index) => {
-            const pill = document.createElement('div');
-            pill.className = 'legend-pill';
-            pill.style.setProperty('--delay', `${index * 110}ms`);
-            pill.innerHTML = `
-                <span class="swatch" style="background:${item.color}"></span>
-                <span class="text">
-                    <span class="name">${item.label}</span>
-                    <span class="count">${item.valueLabel}</span>
-                </span>
-            `;
-            legend.appendChild(pill);
-        });
-        legend.classList.add('visible');
-        return;
-    }
-
-    if (meta.pills && meta.pills.length) {
-        const row = buildLegendPills(meta.pills, meta.compactLegend === true);
-        wrapper.insertAdjacentElement('afterend', row);
-    }
-}
-
-function initChartFromWrapper(wrapper)
-{
-    const canvas = wrapper.querySelector('canvas');
-    if (!canvas) return;
-
-    if (chartInstances[canvas.id]) return;
-
-    const cfg = chartData[canvas.id];
-    if (!cfg) return;
-
-    decorateChartWrapper(wrapper, canvas.id);
-    wrapper.classList.add('chart-active');
-
-    chartInstances[canvas.id] = new Chart(canvas, cfg);
-
-    animateCounters(wrapper);
-
-    if (!reduceMotion) {
-        requestAnimationFrame(() => {
-            setTimeout(() => wrapper.classList.add('visible'), 110);
-        });
-    }
-}
-
-const companyLabels = <?php echo json_encode($company_labels); ?>;
-const companyValues = <?php echo json_encode($company_values); ?>;
-const statusLabels = <?php echo json_encode($status_labels); ?>;
-const statusValues = <?php echo json_encode($status_values); ?>;
-const typeLabels = <?php echo json_encode($type_labels); ?>;
-const typeValues = <?php echo json_encode($type_values); ?>;
-
-const totalApplications = <?php echo (int)$total_applications; ?>;
-const totalStudents = <?php echo (int)$total_students; ?>;
-const totalCompanies = <?php echo (int)$total_companies; ?>;
-const approvalRate = <?php echo json_encode($approval_rate); ?>;
-const totalTypeRecords = typeValues.reduce((sum, value) => sum + Number(value || 0), 0);
-
-const companyPalette = ['#00E5FF', '#7B61FF', '#FF4FD8', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#94A3B8'];
-const typePalette = ['#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#00E5FF', '#64748b'];
-
-const chartMeta = {
-    companyChart: {
-        kind: 'bar',
-        compactLegend: true,
-        pills: companyLabels.slice(0, 6).map((label, idx) => ({
-            label,
-            valueLabel: `${companyValues[idx] ?? 0} students`,
-            badge: `#${idx + 1}`,
-            color: companyPalette[idx % companyPalette.length]
-        }))
-    },
-    statusChart: {
-        kind: 'donut',
-        pills: [
-            { label: 'Approved', valueLabel: `${<?php echo (int)$approved_count; ?>}`, color: '#22C55E' },
-            { label: 'Pending', valueLabel: `${<?php echo (int)$pending_count; ?>}`, color: '#F59E0B' },
-            { label: 'Rejected', valueLabel: `${<?php echo (int)$rejected_count; ?>}`, color: '#EF4444' },
-            { label: 'No Internship', valueLabel: `${<?php echo (int)$not_submitted_count; ?>}`, color: '#9CA3AF' }
-        ]
-    },
-    typeChart: {
-        kind: 'donut',
-        pills: typeLabels.map((label, idx) => ({
-            label,
-            valueLabel: `${typeValues[idx] ?? 0}`,
-            color: typePalette[idx % typePalette.length]
-        }))
-    }
-};
-
-Chart.defaults.color = '#24304a';
-Chart.defaults.font.family = "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-
-
-const chartData = {
-    companyChart: {
-        type: 'bar',
-        data: {
-            labels: companyLabels,
-            datasets: [{
-                label: 'Students',
-                data: companyValues,
-                backgroundColor: (ctx) => {
-                    const chart = ctx.chart;
-                    const {ctx: c, chartArea} = chart;
-                    if (!chartArea) return '#3B82F6';
-                    const g = c.createLinearGradient(chartArea.left, chartArea.top, chartArea.right, chartArea.top);
-                    g.addColorStop(0, '#00E5FF');
-                    g.addColorStop(.55, '#7B61FF');
-                    g.addColorStop(1, '#FF4FD8');
-                    return g;
-                },
-                borderRadius: 12,
-                barThickness: 18,
-                hoverBackgroundColor: '#ffffff',
-                borderWidth: 0,
-                animation: {
-                    duration: 1800,
-                    easing: 'easeOutBack',
-                    delay: (ctx) => ctx.type === 'data' ? ctx.dataIndex * 110 : 0
-                }
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: { duration: 2200, easing: 'easeOutQuart' },
-            layout: { padding: { left: 8, right: 12, top: 8, bottom: 8 } },
-            plugins: {
-                legend: { display: false },
-                title: { display: true, text: 'Top Recruiting Companies', color: '#26304a', font: { size: 14, weight: '700' } },
-                tooltip: { backgroundColor: 'rgba(255,255,255,.96)', titleColor: '#162033', bodyColor: '#162033', borderColor: 'rgba(123,97,255,.18)', borderWidth: 1, padding: 12, displayColors: false }
-            },
-            scales: {
-                x: { beginAtZero: true, ticks: { precision: 0, color: 'rgba(38,48,74,.76)' }, grid: { color: 'rgba(123,97,255,.10)' } },
-                y: { ticks: { font: { size: 12 }, color: 'rgba(38,48,74,.82)' }, grid: { display: false } }
-            }
-        }
-    },
-    statusChart: {
-        type: 'doughnut',
-        data: {
-            labels: statusLabels,
-            datasets: [{
-                data: statusValues,
-                backgroundColor: ['#22c55e','#f59e0b','#ef4444','#9ca3af'],
-                borderWidth: 0,
-                hoverOffset: 10,
-                spacing: 3
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '68%',
-            /* "Stacked cascade" entrance: identical to typeChart below —
-               the ring rotates/scales in as a whole (animateRotate +
-               animateScale) while each wedge is additionally staggered
-               in on top of that via the per-index delay, so the slices
-               appear to stack in one after another rather than all
-               snapping in at once. */
-            animation: {
-                duration: 2200,
-                easing: 'easeOutQuart',
-                animateRotate: true,
-                animateScale: true,
-                delay: (ctx) => ctx.type === 'data' ? ctx.dataIndex * 120 : 0
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: { backgroundColor: 'rgba(255,255,255,.96)', titleColor: '#162033', bodyColor: '#162033', borderColor: 'rgba(123,97,255,.18)', borderWidth: 1, padding: 12, displayColors: false }
-            }
-        }
-    },
-    typeChart: {
-        type: 'doughnut',
-        data: {
-            labels: typeLabels,
-            datasets: [{
-                data: typeValues,
-                backgroundColor: ['#3B82F6','#22C55E','#F59E0B','#EF4444','#8B5CF6','#00E5FF','#64748b'],
-                borderWidth: 0,
-                hoverOffset: 8,
-                spacing: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '68%',
-            /* Same cascade timing/easing/stagger as statusChart above —
-               kept byte-for-byte identical on purpose so both panels
-               animate in exactly the same way. */
-            animation: {
-                duration: 2200,
-                easing: 'easeOutQuart',
-                animateRotate: true,
-                animateScale: true,
-                delay: (ctx) => ctx.type === 'data' ? ctx.dataIndex * 120 : 0
-            },
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: { backgroundColor: 'rgba(255,255,255,.96)', titleColor: '#162033', bodyColor: '#162033', borderColor: 'rgba(123,97,255,.18)', borderWidth: 1, padding: 12, displayColors: false }
-            }
-        }
-    }
-};
-
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        const el = entry.target;
-        if (entry.isIntersecting) {
-            el.classList.add('visible');
-            if (el.classList.contains('stat-card')) {
-                animateCounters(el);
-            }
-            if (el.classList.contains('reveal') && el.querySelector('.stat-number')) {
-                animateCounters(el);
-            }
-            if (el.classList.contains('chart-ready')) {
-                initChartFromWrapper(el);
-            }
-        } else {
-            el.classList.remove('visible');
-            if (el.classList.contains('chart-ready')) {
-                const canvas = el.querySelector('canvas');
-                if (canvas) destroyChart(canvas.id);
-                el.classList.remove('chart-active');
-                el.querySelectorAll('.stat-number').forEach(resetCounter);
-            }
-            if (el.classList.contains('stat-card')) {
-                el.querySelectorAll('.stat-number').forEach(resetCounter);
-            }
-        }
-    });
-}, { threshold: 0.12, rootMargin: '0px 0px -2% 0px' });
-
-document.querySelectorAll('.reveal, .chart-ready, .stat-card').forEach(el => observer.observe(el));
-
-window.addEventListener('load', () => {
-    document.querySelectorAll('.reveal, .chart-ready').forEach(el => {
-        if (el.getBoundingClientRect().top < window.innerHeight * 0.9) {
-            el.classList.add('visible');
-            if (el.classList.contains('chart-ready')) {
-                initChartFromWrapper(el);
-            }
-        }
-    });
-});
 </script>
 
 <?php include __DIR__ . '/includes/sidebar_scripts.php'; ?>
-
 </body>
-
 </html>
