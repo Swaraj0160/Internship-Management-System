@@ -1,86 +1,83 @@
 <?php
 /* -----------------------------------------------------------------
-   NEW FILE — mobile sidebar toggle JS for student pages.
-
-   Include this right before </body>. Requires the including page to
-   have closed the markup opened by sidebar_nav.php as:
-
-       </main>
-   </div>   (closes .app)
-
-   right before this include (any page-specific content/scripts can
-   sit between the page's own closing tags and </main></div>).
+   InternHub — Student Shell Interactive Scripts
+   Handles mobile sidebar off-canvas toggle and topbar profile menu
    ----------------------------------------------------------------- */
 ?>
 <script>
 (function () {
+    // 1. Mobile Sidebar Controls
     var sidebar = document.getElementById('stuSidebar');
     var backdrop = document.getElementById('stuSidebarBackdrop');
-    var toggle = document.getElementById('stuMobileMenuToggle');
-
-    if (!sidebar || !backdrop || !toggle) return;
+    var mobileToggle = document.getElementById('stuMobileMenuToggle');
 
     function openSidebar() {
-        sidebar.classList.add('open');
-        backdrop.classList.add('show');
+        if (sidebar) sidebar.classList.add('open');
+        if (backdrop) backdrop.classList.add('open');
     }
 
     function closeSidebar() {
-        sidebar.classList.remove('open');
-        backdrop.classList.remove('show');
+        if (sidebar) sidebar.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('open');
     }
 
-    toggle.addEventListener('click', function () {
-        if (sidebar.classList.contains('open')) {
-            closeSidebar();
-        } else {
-            openSidebar();
-        }
-    });
-
-    backdrop.addEventListener('click', closeSidebar);
-
-    sidebar.querySelectorAll('.nav a').forEach(function (link) {
-        link.addEventListener('click', function () {
-            if (window.innerWidth <= 992) {
+    if (mobileToggle) {
+        mobileToggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (sidebar && sidebar.classList.contains('open')) {
                 closeSidebar();
+            } else {
+                openSidebar();
             }
         });
-    });
+    }
 
-    /* NEW (post-implementation audit — exact sidebar requirement):
-       functional profile dropdown, same pattern as admin/faculty. */
-    var profileTrigger = document.getElementById('stuProfileTrigger');
-    var profileDropdown = document.getElementById('stuProfileDropdown');
+    if (backdrop) {
+        backdrop.addEventListener('click', closeSidebar);
+    }
 
-    if (profileTrigger && profileDropdown) {
-        function closeProfileDropdown() {
-            profileDropdown.classList.remove('open');
-            profileTrigger.setAttribute('aria-expanded', 'false');
-        }
-        function openProfileDropdown() {
-            profileDropdown.classList.add('open');
-            profileTrigger.setAttribute('aria-expanded', 'true');
-        }
+    // 2. Topbar Profile Dropdown
+    var profileTrigger = document.getElementById('topProfileTrigger');
+    var profileMenu = document.getElementById('topProfileMenu');
 
-        profileTrigger.addEventListener('click', function (e) {
+    if (profileTrigger && profileMenu) {
+        function toggleProfileMenu(e) {
             e.stopPropagation();
-            if (profileDropdown.classList.contains('open')) {
-                closeProfileDropdown();
+            var isOpen = profileMenu.classList.contains('show');
+            if (isOpen) {
+                profileMenu.classList.remove('show');
+                profileTrigger.setAttribute('aria-expanded', 'false');
             } else {
-                openProfileDropdown();
+                profileMenu.classList.add('show');
+                profileTrigger.setAttribute('aria-expanded', 'true');
+            }
+        }
+
+        profileTrigger.addEventListener('click', toggleProfileMenu);
+        profileTrigger.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleProfileMenu(e);
             }
         });
 
         document.addEventListener('click', function (e) {
-            if (!profileDropdown.contains(e.target) && e.target !== profileTrigger) {
-                closeProfileDropdown();
+            if (!profileTrigger.contains(e.target)) {
+                profileMenu.classList.remove('show');
+                profileTrigger.setAttribute('aria-expanded', 'false');
             }
         });
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') closeProfileDropdown();
-        });
     }
+
+    // 3. Global Escape Key Handler
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            closeSidebar();
+            if (profileMenu) {
+                profileMenu.classList.remove('show');
+                if (profileTrigger) profileTrigger.setAttribute('aria-expanded', 'false');
+            }
+        }
+    });
 })();
 </script>
