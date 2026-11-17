@@ -233,17 +233,25 @@ body {
 .sidebar-bottom-art {
     margin-top: auto;
     width: 100%;
-    padding: 0 10px;
+    padding: 12px 14px 4px;
     text-align: center;
     pointer-events: none;
-    opacity: 0.92;
+    opacity: 0.88;
 }
 
 .sidebar-bottom-art img {
     width: 100%;
-    max-width: 215px;
+    max-width: 210px;
+    height: auto;
     display: block;
     margin: 0 auto;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2));
+}
+
+@media (max-height: 720px) {
+    .sidebar-bottom-art {
+        display: none;
+    }
 }
 
 /* Main Content Area */
@@ -493,6 +501,84 @@ body {
     height: 1px;
     background: #e2e8f0;
     margin: 6px 0;
+}
+
+/* Notification Popover Menu */
+.notif-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: 340px;
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.12);
+    border: 1px solid rgba(226, 232, 240, 0.85);
+    padding: 0;
+    display: none;
+    z-index: 1100;
+    overflow: hidden;
+}
+
+.notif-menu.show { display: block; }
+
+.notif-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: #faf8fd;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.notif-menu-header-title {
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: #1e1b4b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notif-menu-badge {
+    background: #ede9fe;
+    color: #6d28d9;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.notif-menu-list {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.notif-menu-item {
+    padding: 12px 18px;
+    border-bottom: 1px solid #f8fafc;
+    transition: background 0.15s ease;
+}
+
+.notif-menu-item:last-child { border-bottom: none; }
+.notif-menu-item:hover { background: #fdf8ff; }
+
+.notif-menu-item-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #1e1b4b;
+    margin-bottom: 3px;
+}
+
+.notif-menu-item-msg {
+    font-size: 0.76rem;
+    color: #475569;
+    line-height: 1.35;
+}
+
+.notif-menu-item-date {
+    font-size: 0.68rem;
+    color: #94a3b8;
+    margin-top: 4px;
 }
 
 /* Mobile Hamburger Toggle */

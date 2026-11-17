@@ -39,10 +39,13 @@
     // 2. Topbar Profile Dropdown
     var profileTrigger = document.getElementById('topProfileTrigger');
     var profileMenu = document.getElementById('topProfileMenu');
+    var notifBellBtn = document.getElementById('notifBellBtn');
+    var notifMenu = document.getElementById('topNotifMenu');
 
     if (profileTrigger && profileMenu) {
         function toggleProfileMenu(e) {
             e.stopPropagation();
+            if (notifMenu) notifMenu.classList.remove('show');
             var isOpen = profileMenu.classList.contains('show');
             if (isOpen) {
                 profileMenu.classList.remove('show');
@@ -60,14 +63,35 @@
                 toggleProfileMenu(e);
             }
         });
-
-        document.addEventListener('click', function (e) {
-            if (!profileTrigger.contains(e.target)) {
-                profileMenu.classList.remove('show');
-                profileTrigger.setAttribute('aria-expanded', 'false');
-            }
-        });
     }
+
+    if (notifBellBtn && notifMenu) {
+        function toggleNotifMenu(e) {
+            e.stopPropagation();
+            if (profileMenu) profileMenu.classList.remove('show');
+            var isOpen = notifMenu.classList.contains('show');
+            if (isOpen) {
+                notifMenu.classList.remove('show');
+                notifBellBtn.setAttribute('aria-expanded', 'false');
+            } else {
+                notifMenu.classList.add('show');
+                notifBellBtn.setAttribute('aria-expanded', 'true');
+            }
+        }
+
+        notifBellBtn.addEventListener('click', toggleNotifMenu);
+    }
+
+    document.addEventListener('click', function (e) {
+        if (profileTrigger && profileMenu && !profileTrigger.contains(e.target) && !profileMenu.contains(e.target)) {
+            profileMenu.classList.remove('show');
+            profileTrigger.setAttribute('aria-expanded', 'false');
+        }
+        if (notifBellBtn && notifMenu && !notifBellBtn.contains(e.target) && !notifMenu.contains(e.target)) {
+            notifMenu.classList.remove('show');
+            notifBellBtn.setAttribute('aria-expanded', 'false');
+        }
+    });
 
     // 3. Global Escape Key Handler
     document.addEventListener('keydown', function (e) {
@@ -76,6 +100,10 @@
             if (profileMenu) {
                 profileMenu.classList.remove('show');
                 if (profileTrigger) profileTrigger.setAttribute('aria-expanded', 'false');
+            }
+            if (notifMenu) {
+                notifMenu.classList.remove('show');
+                if (notifBellBtn) notifBellBtn.setAttribute('aria-expanded', 'false');
             }
         }
     });

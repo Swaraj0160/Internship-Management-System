@@ -69,6 +69,21 @@ $unread_q = mysqli_query($conn, "
 if ($unread_q) {
     $unread_count = (int)(mysqli_fetch_assoc($unread_q)['c'] ?? 0);
 }
+
+// Fetch latest notifications for the topbar popover
+$top_notifs = [];
+$top_notif_q = mysqli_query($conn, "
+    (SELECT id, title, message, created_at, 'admin' AS ntype FROM admin_notifications WHERE (target_role='student' OR target_role='all'))
+    UNION ALL
+    (SELECT id, title, message, created_at, 'faculty' AS ntype FROM faculty_notifications WHERE division='{$student_division}')
+    ORDER BY created_at DESC
+    LIMIT 6
+");
+if ($top_notif_q) {
+    while ($tn = mysqli_fetch_assoc($top_notif_q)) {
+        $top_notifs[] = $tn;
+    }
+}
 ?>
 <div class="app">
     <!-- Sidebar -->
@@ -194,12 +209,40 @@ if ($unread_q) {
 
             <!-- Notification Bell & Profile Dropdown -->
             <div class="topbar-right">
-                <button type="button" class="topbar-bell-btn" id="notifBellBtn" title="Notifications" onclick="location.href='dashboard.php#notifications';">
-                    <i class="fa-regular fa-bell"></i>
-                    <?php if ($unread_count > 0): ?>
-                        <span class="topbar-bell-dot"></span>
-                    <?php endif; ?>
-                </button>
+                <div style="position:relative;">
+                    <button type="button" class="topbar-bell-btn" id="notifBellBtn" title="Notifications" aria-haspopup="true" aria-expanded="false">
+                        <i class="fa-regular fa-bell"></i>
+                        <?php if ($unread_count > 0): ?>
+                            <span class="topbar-bell-dot"></span>
+                        <?php endif; ?>
+                    </button>
+
+                    <!-- Notifications Dropdown -->
+                    <div class="notif-menu" id="topNotifMenu">
+                        <div class="notif-menu-header">
+                            <span class="notif-menu-header-title">
+                                <i class="fa-regular fa-bell" style="color:#7c3aed;"></i>
+                                <span>Notifications</span>
+                            </span>
+                            <span class="notif-menu-badge"><?php echo count($top_notifs); ?> updates</span>
+                        </div>
+                        <div class="notif-menu-list">
+                            <?php if (!empty($top_notifs)): ?>
+                                <?php foreach ($top_notifs as $tn): ?>
+                                    <div class="notif-menu-item">
+                                        <div class="notif-menu-item-title"><?php echo h($tn['title']); ?></div>
+                                        <div class="notif-menu-item-msg"><?php echo nl2br(h($tn['message'])); ?></div>
+                                        <div class="notif-menu-item-date"><?php echo date('d M Y, h:i A', strtotime($tn['created_at'])); ?></div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div style="padding:24px 18px; text-align:center; color:#64748b; font-size:0.8rem;">
+                                    No announcements at this time.
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Profile Dropdown Trigger -->
                 <div class="topbar-profile-pill" id="topProfileTrigger" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">

@@ -802,63 +802,6 @@ if ($notif_res) {
         color: #7c3aed;
     }
 
-    /* Notification Drawer */
-    .notif-section {
-        background: #ffffff;
-        border-radius: 20px;
-        padding: 22px 24px;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.035);
-        border: 1px solid rgba(226, 232, 240, 0.7);
-    }
-
-    .notif-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 14px;
-        padding: 12px 0;
-        border-bottom: 1px solid #f1f5f9;
-    }
-
-    .notif-item:last-child {
-        border-bottom: none;
-    }
-
-    .notif-icon-circle {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: #ede9fe;
-        color: #6d28d9;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.95rem;
-        flex-shrink: 0;
-    }
-
-    .notif-body {
-        flex: 1;
-    }
-
-    .notif-item-title {
-        font-size: 0.86rem;
-        font-weight: 700;
-        color: #1e1b4b;
-    }
-
-    .notif-item-msg {
-        font-size: 0.78rem;
-        color: #475569;
-        margin-top: 2px;
-        line-height: 1.4;
-    }
-
-    .notif-item-date {
-        font-size: 0.68rem;
-        color: #94a3b8;
-        margin-top: 4px;
-    }
-
     /* Responsive */
     @media (max-width: 1200px) {
         .metric-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1127,35 +1070,6 @@ if ($notif_res) {
                     </div>
                     <i class="fa-solid fa-chevron-right reminder-chevron"></i>
                 </a>
-            </div>
-        </div>
-    </section>
-
-    <!-- 4. Notifications & Institutional Bulletins -->
-    <section class="notif-section" id="notifications">
-        <div class="panel-header">
-            <span class="panel-title"><i class="fa-regular fa-bell" style="color:#7c3aed; margin-right:8px;"></i> Institutional Announcements</span>
-            <span style="font-size:0.75rem; color:#64748b; font-weight:600;"><?php echo count($notifications_list); ?> bulletins</span>
-        </div>
-
-        <?php if (!empty($notifications_list)): ?>
-            <?php foreach ($notifications_list as $n): ?>
-                <div class="notif-item">
-                    <div class="notif-icon-circle">
-                        <i class="fa-solid fa-bullhorn"></i>
-                    </div>
-                    <div class="notif-body">
-                        <div class="notif-item-title"><?php echo h($n['title']); ?></div>
-                        <div class="notif-item-msg"><?php echo nl2br(h($n['message'])); ?></div>
-                        <div class="notif-item-date"><?php echo date('d M Y, h:i A', strtotime($n['created_at'])); ?></div>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        <?php else: ?>
-            <p style="font-size:0.82rem; color:#64748b; text-align:center; padding:16px 0;">No active announcements at this time.</p>
-        <?php endif; ?>
-    </section>
-
 </div>
 
 </main>
