@@ -1,0 +1,14 @@
+# InternHub Apache Configuration for InfinityFree
+DirectoryIndex index.php index.html
+
+# Prevent Directory Browsing
+Options -Indexes
+
+# Protect sensitive files and directories
+<FilesMatch "^(\.env|\.git|\.htaccess|\.user\.ini|composer\.(json|lock)|package(-lock)?\.json|.*\.sql|.*\.md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Enforce UTF-8 Charset
+AddDefaultCharset UTF-8

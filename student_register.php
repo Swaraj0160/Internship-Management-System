@@ -94,9 +94,10 @@ if (isset($_POST['register_student'])) {
 
             // Send Verification Email
             MailService::sendStudentVerification($email, $fullName, $rawToken);
+            $verifyUrl = "verify_email.php?token=" . urlencode($rawToken) . "&type=student";
 
             $showConfirmation = true;
-            $successMsg = "Registration successful! A verification email has been sent to <strong>" . htmlspecialchars($email) . "</strong>. Please click the link in your email to activate your account.";
+            $successMsg = "Registration successful! A verification email has been dispatched to <strong>" . htmlspecialchars($email) . "</strong>.<br><br><div class='mt-2 p-2 rounded bg-light border text-center'><span class='small text-muted d-block mb-1'>Hosting / Instant Verification:</span><a href='" . htmlspecialchars($verifyUrl) . "' class='btn btn-sm btn-primary text-white px-3 py-1 text-decoration-none rounded-pill shadow-sm'>Click Here to Activate Account Instantly</a></div>";
         } else {
             $errorMsg = "Failed to create account due to a database error. Please try again.";
         }

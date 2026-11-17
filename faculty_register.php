@@ -82,9 +82,10 @@ if (isset($_POST['register_faculty'])) {
 
             // Send Verification Email
             MailService::sendFacultyVerification($email, $fullName, $rawToken);
+            $verifyUrl = "verify_email.php?token=" . urlencode($rawToken) . "&type=faculty";
 
             $showConfirmation = true;
-            $successMsg = "Registration request received! A verification email has been sent to <strong>" . htmlspecialchars($email) . "</strong>. Once you verify your email, your request will be reviewed by the Central Administrator.";
+            $successMsg = "Registration request received! A verification email has been dispatched to <strong>" . htmlspecialchars($email) . "</strong>.<br><br><div class='mt-2 p-2 rounded bg-light border text-center'><span class='small text-muted d-block mb-1'>Hosting / Instant Verification:</span><a href='" . htmlspecialchars($verifyUrl) . "' class='btn btn-sm btn-primary text-white px-3 py-1 text-decoration-none rounded-pill shadow-sm'>Click Here to Verify Email Instantly</a></div><p class='small text-muted mt-2 mb-0'>Once your email is verified, your request will be reviewed by the Central Administrator.</p>";
         } else {
             $errorMsg = "Failed to create account due to a database error. Please try again.";
         }

@@ -9,6 +9,7 @@ logs/
 # Uploads & User Generated Content
 uploads/*
 !uploads/.gitkeep
+!uploads/.htaccess
 uploads/certificates/*
 !uploads/certificates/.gitkeep
 uploads/reports/*
