@@ -193,11 +193,11 @@ if(isset($_POST['login']))
             width: 100%;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             color: var(--text-dark);
-            background-color: #1a0b2e;
+            background-color: #f8fafc;
             overflow-x: hidden;
         }
 
-        /* Full-Viewport Landing Page with Campus Photography */
+        /* Full-Viewport Landing Page with Natural, Bright Campus Photography */
         .portal-viewport {
             position: relative;
             min-height: 100vh;
@@ -205,34 +205,37 @@ if(isset($_POST['login']))
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            background-color: #1a0b2e;
+            background-color: #f8fafc;
             background-image: url('assets/images/campus_bg_reference.webp'), url('assets/images/campus_bg_reference.jpg');
             background-size: cover;
             background-position: center center;
             background-repeat: no-repeat;
-            padding: clamp(14px, 2.5vh, 24px) clamp(20px, 4vw, 48px);
+            padding: clamp(24px, 3.8vh, 40px) clamp(32px, 4.3vw, 72px);
             z-index: 1;
             overflow: hidden;
         }
 
-        /* Subtle dark gradient overlay behind left-side text to ensure high contrast without dimming campus */
+        /* Subtle localized dark gradient overlay ONLY behind left hero text for high readability without dimming the campus, building, sky, or water */
         .portal-viewport::before {
             content: '';
             position: absolute;
-            inset: 0;
-            background: linear-gradient(90deg, rgba(12, 6, 24, 0.72) 0%, rgba(18, 9, 36, 0.48) 45%, rgba(20, 10, 40, 0.12) 70%, transparent 100%);
+            top: 0;
+            left: 0;
+            width: 44%;
+            height: 100%;
+            background: radial-gradient(ellipse 90% 70% at 18% 54%, rgba(10, 5, 22, 0.42) 0%, rgba(12, 6, 26, 0.18) 55%, transparent 95%);
             z-index: 1;
             pointer-events: none;
         }
 
-        /* Decorative Lavender Corner Curves (matching reference) */
+        /* Flowing Soft Lavender Decorative Waves on Right Side (matching reference) */
         .corner-accents {
             position: absolute;
             top: 0;
             right: 0;
             bottom: 0;
-            width: 44%;
-            max-width: 580px;
+            width: 38%;
+            max-width: 520px;
             height: 100%;
             pointer-events: none;
             z-index: 2;
@@ -242,7 +245,6 @@ if(isset($_POST['login']))
         .accent-swoosh {
             width: 100%;
             height: 100%;
-            filter: drop-shadow(0 0 40px rgba(168, 85, 247, 0.15));
         }
 
         /* Top Bar: University Branding & Navigation Pills */
@@ -253,7 +255,7 @@ if(isset($_POST['login']))
             align-items: center;
             justify-content: space-between;
             width: 100%;
-            padding-bottom: 12px;
+            padding-bottom: clamp(12px, 2vh, 20px);
         }
 
         .university-branding {
@@ -264,20 +266,20 @@ if(isset($_POST['login']))
         }
 
         .brand-crest {
-            width: 48px;
-            height: 48px;
+            width: clamp(50px, 3.8vw, 60px);
+            height: clamp(50px, 3.8vw, 60px);
             object-fit: contain;
             filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));
         }
 
         .brand-details {
-            margin-left: 12px;
+            margin-left: clamp(12px, 1vw, 16px);
             display: flex;
             flex-direction: column;
         }
 
         .brand-title {
-            font-size: 1.15rem;
+            font-size: clamp(1.15rem, 1.35vw, 1.35rem);
             font-weight: 700;
             letter-spacing: 0.5px;
             line-height: 1.1;
@@ -289,7 +291,7 @@ if(isset($_POST['login']))
         }
 
         .brand-university {
-            font-size: 0.8rem;
+            font-size: clamp(0.82rem, 0.92vw, 0.9rem);
             font-weight: 700;
             letter-spacing: 1px;
             line-height: 1.2;
@@ -298,7 +300,7 @@ if(isset($_POST['login']))
         }
 
         .brand-location {
-            font-size: 0.65rem;
+            font-size: clamp(0.66rem, 0.72vw, 0.72rem);
             font-weight: 500;
             letter-spacing: 1.5px;
             color: rgba(255, 255, 255, 0.85);
@@ -307,15 +309,15 @@ if(isset($_POST['login']))
 
         .brand-separator {
             width: 1px;
-            height: 38px;
+            height: 40px;
             background: rgba(255, 255, 255, 0.45);
-            margin: 0 16px;
+            margin: 0 clamp(16px, 1.4vw, 22px);
         }
 
         .brand-tagline {
             display: flex;
             flex-direction: column;
-            font-size: 0.76rem;
+            font-size: clamp(0.8rem, 0.88vw, 0.86rem);
             font-weight: 500;
             color: rgba(255, 255, 255, 0.95);
             line-height: 1.35;
@@ -337,9 +339,9 @@ if(isset($_POST['login']))
             -webkit-backdrop-filter: blur(10px);
             color: #2e155c;
             border: 1px solid rgba(255, 255, 255, 0.95);
-            padding: 7px 18px;
+            padding: 8px 20px;
             border-radius: 9999px;
-            font-size: 0.82rem;
+            font-size: 0.85rem;
             font-weight: 600;
             text-decoration: none;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
@@ -365,9 +367,9 @@ if(isset($_POST['login']))
             background: var(--primary-purple);
             color: #ffffff;
             border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 7px 18px;
+            padding: 8px 20px;
             border-radius: 9999px;
-            font-size: 0.82rem;
+            font-size: 0.85rem;
             font-weight: 600;
             text-decoration: none;
             box-shadow: 0 4px 14px rgba(79, 45, 147, 0.35);
@@ -388,15 +390,17 @@ if(isset($_POST['login']))
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 40px;
-            margin: auto 0;
-            padding: 20px 0;
+            gap: clamp(36px, 4vw, 64px);
+            margin-top: clamp(14px, 2.6vh, 30px);
+            margin-bottom: auto;
+            padding: 10px 0;
             width: 100%;
+            flex: 1;
         }
 
         /* Left Promotional Section (approx. 67% Desktop Width) */
         .hero-section {
-            flex: 1.4;
+            flex: 1.35;
             max-width: 680px;
             color: #ffffff;
             display: flex;
@@ -409,28 +413,28 @@ if(isset($_POST['login']))
             gap: 8px;
             background: var(--badge-purple);
             color: #ffffff;
-            padding: 5px 13px;
+            padding: 6px 15px;
             border-radius: 9999px;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-weight: 600;
             letter-spacing: 0.3px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
             width: fit-content;
-            margin-bottom: clamp(14px, 2.2vh, 22px);
+            margin-bottom: clamp(18px, 2.6vh, 26px);
         }
 
         .hero-badge i {
-            font-size: 0.85rem;
+            font-size: 0.88rem;
         }
 
         .hero-heading {
-            font-size: clamp(2.3rem, 3.8vw, 3.5rem);
+            font-size: clamp(2.7rem, 4vw, 3.7rem);
             font-weight: 700;
             line-height: 1.15;
             color: #ffffff;
             letter-spacing: -0.02em;
-            text-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
-            margin-bottom: clamp(12px, 1.8vh, 18px);
+            text-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
+            margin-bottom: clamp(16px, 2.2vh, 22px);
         }
 
         .hero-heading .serif-italic {
@@ -438,17 +442,17 @@ if(isset($_POST['login']))
             font-style: italic;
             font-weight: 600;
             color: var(--lavender-light);
-            text-shadow: 0 2px 14px rgba(124, 58, 237, 0.35);
+            text-shadow: 0 2px 20px rgba(168, 85, 247, 0.35);
             letter-spacing: 0.01em;
         }
 
         .hero-description {
-            font-size: clamp(0.92rem, 1.1vw, 1.05rem);
-            line-height: 1.5;
-            color: rgba(255, 255, 255, 0.92);
-            max-width: 480px;
-            text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
-            margin-bottom: clamp(18px, 2.6vh, 28px);
+            font-size: clamp(1.02rem, 1.15vw, 1.12rem);
+            line-height: 1.55;
+            color: rgba(255, 255, 255, 0.94);
+            max-width: 510px;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+            margin-bottom: clamp(28px, 3.8vh, 38px);
             font-weight: 400;
         }
 
@@ -463,45 +467,47 @@ if(isset($_POST['login']))
         .feature-item {
             display: flex;
             flex-direction: column;
-            padding-right: clamp(16px, 2vw, 28px);
+            padding-right: clamp(18px, 2.2vw, 30px);
         }
 
         .feature-icon-wrapper {
-            font-size: 1.35rem;
+            font-size: 1.5rem;
             color: var(--lavender-accent);
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             line-height: 1;
             filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
         }
 
         .feature-title {
-            font-size: 0.88rem;
+            font-size: 0.94rem;
             font-weight: 600;
             color: #ffffff;
-            line-height: 1.32;
+            line-height: 1.35;
             letter-spacing: 0.2px;
             text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
         }
 
         .feature-separator {
             width: 1px;
-            height: 42px;
-            background: rgba(255, 255, 255, 0.26);
-            margin: 4px clamp(14px, 1.6vw, 24px) 0 0;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.32);
+            margin: 6px clamp(16px, 1.8vw, 26px) 0 0;
             flex-shrink: 0;
         }
 
         .accent-dash {
-            width: 36px;
-            height: 2px;
-            background: rgba(255, 255, 255, 0.45);
-            margin-top: clamp(14px, 2vh, 22px);
+            width: 42px;
+            height: 2.5px;
+            background: rgba(255, 255, 255, 0.5);
+            margin-top: clamp(20px, 2.8vh, 28px);
             border-radius: 2px;
         }
 
-        /* Right Section: Prominent White Login Card */
+        /* Right Section: Prominent Spacious White Login Card (matching reference dimensions ~491px x ~664px) */
         .login-card-container {
-            flex: 0 0 clamp(380px, 28vw, 425px);
+            flex: 0 0 clamp(440px, 29.4vw, 492px);
+            max-width: 492px;
+            width: 100%;
             display: flex;
             justify-content: flex-end;
             position: relative;
@@ -510,21 +516,21 @@ if(isset($_POST['login']))
 
         .login-card {
             width: 100%;
-            max-width: 425px;
+            max-width: 492px;
             background: #ffffff;
-            border-radius: 26px;
-            border: 1px solid rgba(255, 255, 255, 0.9);
-            box-shadow: 0 20px 50px -10px rgba(25, 6, 52, 0.28), 0 0 0 1px rgba(124, 58, 237, 0.05);
-            padding: clamp(22px, 3vh, 30px) clamp(22px, 2.4vw, 32px) clamp(16px, 2vh, 22px) clamp(22px, 2.4vw, 32px);
+            border-radius: 28px;
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 24px 60px -12px rgba(25, 6, 52, 0.22), 0 0 0 1px rgba(124, 58, 237, 0.04);
+            padding: clamp(34px, 4.4vh, 44px) clamp(28px, 2.4vw, 40px) clamp(26px, 3.2vh, 32px) clamp(28px, 2.4vw, 40px);
             position: relative;
         }
 
         /* Architectural Dome Illustration in Upper-Right Corner */
         .card-dome-art {
             position: absolute;
-            top: clamp(18px, 2.4vh, 24px);
-            right: clamp(18px, 2.2vw, 26px);
-            width: clamp(64px, 5vw, 74px);
+            top: clamp(28px, 3.6vh, 36px);
+            right: clamp(28px, 2.4vw, 36px);
+            width: clamp(74px, 5.2vw, 86px);
             height: auto;
             opacity: 0.88;
             pointer-events: none;
@@ -532,27 +538,27 @@ if(isset($_POST['login']))
         }
 
         .card-header-area {
-            margin-bottom: clamp(12px, 1.8vh, 18px);
+            margin-bottom: clamp(20px, 2.8vh, 26px);
         }
 
         .card-pretitle {
-            font-size: 0.98rem;
+            font-size: clamp(1.05rem, 1.15vw, 1.15rem);
             font-weight: 600;
             color: #1e293b;
-            line-height: 1.2;
+            line-height: 1.25;
         }
 
         .card-main-title {
-            font-size: clamp(1.85rem, 2.4vw, 2.15rem);
+            font-size: clamp(2.05rem, 2.4vw, 2.4rem);
             font-weight: 800;
-            color: #3b1d77;
+            color: #381d6f;
             letter-spacing: -0.02em;
             line-height: 1.12;
-            margin: 2px 0 4px 0;
+            margin: 3px 0 6px 0;
         }
 
         .card-subtitle {
-            font-size: 0.82rem;
+            font-size: clamp(0.86rem, 0.95vw, 0.92rem);
             color: var(--text-muted);
             margin: 0;
             font-weight: 400;
@@ -563,31 +569,33 @@ if(isset($_POST['login']))
             background: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 9999px;
-            padding: 3px;
+            padding: 4px;
             display: flex;
             gap: 4px;
-            margin-bottom: clamp(12px, 1.8vh, 18px);
+            margin-bottom: clamp(18px, 2.5vh, 24px);
+            height: 44px;
         }
 
         .role-pill {
             flex: 1;
+            height: 36px;
             border: none;
             background: transparent;
-            padding: 6px 8px;
+            padding: 6px 10px;
             border-radius: 9999px;
-            font-size: 0.8rem;
+            font-size: 0.88rem;
             font-weight: 600;
             color: #475569;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+            gap: 7px;
             cursor: pointer;
             transition: all 0.22s ease;
         }
 
         .role-pill i {
-            font-size: 0.88rem;
+            font-size: 0.92rem;
         }
 
         .role-pill:hover:not(.active) {
@@ -596,32 +604,32 @@ if(isset($_POST['login']))
         }
 
         .role-pill.active {
-            background: linear-gradient(135deg, #532fa0 0%, #401f82 100%);
+            background: linear-gradient(135deg, #512da8 0%, #3e1f82 100%);
             color: #ffffff;
-            box-shadow: 0 4px 12px rgba(79, 45, 147, 0.28);
+            box-shadow: 0 4px 14px rgba(79, 45, 147, 0.28);
         }
 
         /* Input Controls & Labels */
         .form-group-custom {
-            margin-bottom: clamp(10px, 1.4vh, 14px);
+            margin-bottom: clamp(14px, 2vh, 18px);
         }
 
         .field-label {
             display: block;
-            font-size: 0.8rem;
+            font-size: 0.88rem;
             font-weight: 600;
             color: #1e293b;
-            margin-bottom: 5px;
+            margin-bottom: 7px;
         }
 
         .input-box {
             display: flex;
             align-items: center;
             border: 1px solid #e2e8f0;
-            border-radius: 12px;
+            border-radius: 13px;
             background: #ffffff;
-            padding: 0 14px;
-            height: clamp(40px, 4.8vh, 44px);
+            padding: 0 16px;
+            height: clamp(44px, 5.2vh, 48px);
             transition: all 0.2s ease;
         }
 
@@ -632,7 +640,7 @@ if(isset($_POST['login']))
 
         .input-icon {
             color: #94a3b8;
-            font-size: 1rem;
+            font-size: 1.05rem;
             display: flex;
             align-items: center;
             flex-shrink: 0;
@@ -648,7 +656,7 @@ if(isset($_POST['login']))
             outline: none;
             background: transparent;
             width: 100%;
-            font-size: 0.88rem;
+            font-size: 0.92rem;
             color: #0f172a;
             padding: 0 10px;
         }
@@ -676,14 +684,14 @@ if(isset($_POST['login']))
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin: clamp(10px, 1.4vh, 15px) 0 clamp(12px, 1.8vh, 18px) 0;
-            font-size: 0.8rem;
+            margin: clamp(14px, 1.8vh, 18px) 0 clamp(18px, 2.5vh, 24px) 0;
+            font-size: 0.86rem;
         }
 
         .checkbox-container {
             display: inline-flex;
             align-items: center;
-            gap: 7px;
+            gap: 8px;
             color: #475569;
             cursor: pointer;
             user-select: none;
@@ -691,8 +699,8 @@ if(isset($_POST['login']))
         }
 
         .checkbox-container input[type="checkbox"] {
-            width: 15px;
-            height: 15px;
+            width: 16px;
+            height: 16px;
             border-radius: 4px;
             border: 1px solid #cbd5e1;
             cursor: pointer;
@@ -714,19 +722,19 @@ if(isset($_POST['login']))
         /* Sign In Button */
         .btn-signin {
             width: 100%;
-            height: clamp(42px, 5.2vh, 46px);
+            height: clamp(46px, 5.5vh, 52px);
             border: none;
-            border-radius: 12px;
+            border-radius: 13px;
             background: var(--primary-gradient);
             color: #ffffff;
-            font-size: 0.92rem;
+            font-size: 1rem;
             font-weight: 600;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
             cursor: pointer;
-            box-shadow: 0 6px 18px rgba(79, 45, 147, 0.32);
+            box-shadow: 0 8px 24px rgba(79, 45, 147, 0.32);
             transition: all 0.22s ease;
         }
 
@@ -737,7 +745,7 @@ if(isset($_POST['login']))
 
         .btn-signin:hover {
             background: var(--primary-hover);
-            box-shadow: 0 8px 24px rgba(79, 45, 147, 0.42);
+            box-shadow: 0 10px 28px rgba(79, 45, 147, 0.42);
             transform: translateY(-1px);
         }
 
@@ -774,7 +782,7 @@ if(isset($_POST['login']))
 
         /* Card Footer: Security & Copyright */
         .card-footer-area {
-            margin-top: clamp(12px, 1.8vh, 18px);
+            margin-top: clamp(18px, 2.5vh, 26px);
             text-align: center;
         }
 
@@ -783,19 +791,19 @@ if(isset($_POST['login']))
             align-items: center;
             justify-content: center;
             gap: 6px;
-            font-size: 0.74rem;
+            font-size: 0.8rem;
             font-weight: 500;
-            color: #475569;
-            margin-bottom: 4px;
+            color: #52367d;
+            margin-bottom: 6px;
         }
 
         .security-badge i {
             color: #6d28d9;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
         }
 
         .copyright-text {
-            font-size: 0.68rem;
+            font-size: 0.72rem;
             color: #94a3b8;
             margin: 0;
             line-height: 1.4;
@@ -855,6 +863,88 @@ if(isset($_POST['login']))
         .modal-close-btn:hover {
             background: #e2e8f0;
             color: #0f172a;
+        }
+
+        /* Short Screen Height Scaling (maintains full visibility on displays < 750px height) */
+        @media (max-height: 750px) and (min-width: 993px) {
+            .portal-viewport {
+                padding: 16px clamp(24px, 3.5vw, 48px);
+            }
+            .main-workspace {
+                margin-top: 6px;
+                gap: clamp(24px, 3vw, 40px);
+            }
+            .login-card-container {
+                flex: 0 0 clamp(400px, 29vw, 450px);
+            }
+            .login-card {
+                padding: 24px 28px 18px 28px;
+            }
+            .card-dome-art {
+                width: 66px;
+                top: 20px;
+                right: 22px;
+            }
+            .card-header-area {
+                margin-bottom: 12px;
+            }
+            .card-pretitle {
+                font-size: 0.95rem;
+            }
+            .card-main-title {
+                font-size: 1.95rem;
+                margin: 1px 0 3px 0;
+            }
+            .card-subtitle {
+                font-size: 0.8rem;
+            }
+            .role-selector {
+                margin-bottom: 12px;
+                height: 38px;
+            }
+            .role-pill {
+                height: 30px;
+                font-size: 0.8rem;
+                padding: 4px 8px;
+            }
+            .form-group-custom {
+                margin-bottom: 10px;
+            }
+            .field-label {
+                font-size: 0.8rem;
+                margin-bottom: 4px;
+            }
+            .input-box {
+                height: 40px;
+            }
+            .field-control {
+                font-size: 0.86rem;
+            }
+            .form-options-row {
+                margin: 10px 0 14px 0;
+                font-size: 0.8rem;
+            }
+            .btn-signin {
+                height: 42px;
+                font-size: 0.92rem;
+            }
+            .card-footer-area {
+                margin-top: 12px;
+            }
+            .hero-badge {
+                margin-bottom: 14px;
+            }
+            .hero-heading {
+                font-size: 2.6rem;
+                margin-bottom: 12px;
+            }
+            .hero-description {
+                margin-bottom: 18px;
+                font-size: 0.95rem;
+            }
+            .feature-separator {
+                height: 40px;
+            }
         }
 
         /* Responsive Breakpoints */
@@ -954,25 +1044,34 @@ if(isset($_POST['login']))
 
 <div class="portal-viewport">
     
-    <!-- Decorative Lavender Corner Curves (matching reference) -->
+    <!-- Flowing Soft Lavender Decorative Waves on Right Side (matching reference) -->
     <div class="corner-accents" aria-hidden="true">
-        <svg class="accent-swoosh" viewBox="0 0 600 900" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+        <svg class="accent-swoosh" viewBox="0 0 600 941" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
             <defs>
-                <linearGradient id="lavenderGradTop" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#eeddff" stop-opacity="0.85" />
-                    <stop offset="60%" stop-color="#c4b5fd" stop-opacity="0.65" />
-                    <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.3" />
+                <!-- Subtle soft pastel lavender for upper-right contour -->
+                <linearGradient id="softWaveTop" x1="1" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#eeddff" stop-opacity="0.5" />
+                    <stop offset="60%" stop-color="#e9d5ff" stop-opacity="0.25" />
+                    <stop offset="100%" stop-color="#d8b4fe" stop-opacity="0.05" />
                 </linearGradient>
-                <linearGradient id="lavenderGradBottom" x1="0%" y1="100%" x2="100%" y2="0%">
-                    <stop offset="0%" stop-color="#d8b4fe" stop-opacity="0.9" />
-                    <stop offset="50%" stop-color="#c084fc" stop-opacity="0.6" />
-                    <stop offset="100%" stop-color="#eeddff" stop-opacity="0.25" />
+                <!-- Flowing organic layered wave in lower-right corner -->
+                <linearGradient id="softWaveBottom" x1="1" y1="1" x2="0" y2="0">
+                    <stop offset="0%" stop-color="#c084fc" stop-opacity="0.45" />
+                    <stop offset="50%" stop-color="#d8b4fe" stop-opacity="0.4" />
+                    <stop offset="100%" stop-color="#eeddff" stop-opacity="0.1" />
+                </linearGradient>
+                <linearGradient id="softWaveBottomInner" x1="1" y1="1" x2="0" y2="0">
+                    <stop offset="0%" stop-color="#a855f7" stop-opacity="0.25" />
+                    <stop offset="60%" stop-color="#c084fc" stop-opacity="0.18" />
+                    <stop offset="100%" stop-color="#e9d5ff" stop-opacity="0" />
                 </linearGradient>
             </defs>
-            <!-- Top Right Organic Curve -->
-            <path d="M600,0 L380,0 C390,140 450,220 540,260 C570,273 590,278 600,285 Z" fill="url(#lavenderGradTop)" />
-            <!-- Bottom Right Organic Wave -->
-            <path d="M600,480 C500,520 320,620 380,780 C410,860 480,900 600,900 Z" fill="url(#lavenderGradBottom)" />
+            <!-- Upper-right gentle organic contour -->
+            <path d="M600,90 C520,120 460,200 480,290 C495,350 540,380 600,410 Z" fill="url(#softWaveTop)" />
+            <!-- Lower-right flowing organic wave -->
+            <path d="M600,530 C490,570 340,650 355,760 C370,840 460,900 600,941 Z" fill="url(#softWaveBottom)" />
+            <!-- Soft inner wave accent for layered depth -->
+            <path d="M600,660 C530,690 430,750 440,840 C450,900 520,930 600,941 Z" fill="url(#softWaveBottomInner)" />
         </svg>
     </div>
 
@@ -1020,7 +1119,7 @@ if(isset($_POST['login']))
             </h1>
 
             <p class="hero-description">
-                Your internship journey at MIT-ADT University – manage opportunities, track progress and build a future-ready career.
+                Your internship journey at MIT-ADT University –<br class="d-none d-lg-inline"> manage opportunities, track progress and build<br class="d-none d-lg-inline"> a future-ready career.
             </p>
 
             <div class="features-row">
