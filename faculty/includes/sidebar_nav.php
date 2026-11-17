@@ -2,7 +2,7 @@
 /* -----------------------------------------------------------------
    InternHub — Faculty Portal Unified Navigation Shell
    Structure & visual fidelity aligned with approved reference:
-   media_1794935844127.jpg
+   media_1794939092717.jpg
    ----------------------------------------------------------------- */
 
 if (!function_exists('h')) {
@@ -35,14 +35,14 @@ if (!isset($faculty_divisions) || !is_array($faculty_divisions)) {
     }
 
     if (empty($faculty_divisions)) {
-        $fac_res = mysqli_query($conn, "SELECT full_name, faculty_division FROM users WHERE id='$faculty_id_for_nav'");
+        $fac_res = mysqli_query($conn, "SELECT full_name, faculty_division, department FROM users WHERE id='$faculty_id_for_nav'");
         $fac_row = $fac_res ? mysqli_fetch_assoc($fac_res) : [];
         $legacy = trim((string)($fac_row['faculty_division'] ?? ''));
         if ($legacy !== '') {
             $faculty_divisions[] = $legacy;
         }
     } else {
-        $fac_res = mysqli_query($conn, "SELECT full_name FROM users WHERE id='$faculty_id_for_nav'");
+        $fac_res = mysqli_query($conn, "SELECT full_name, department FROM users WHERE id='$faculty_id_for_nav'");
         $fac_row = $fac_res ? mysqli_fetch_assoc($fac_res) : [];
     }
 
@@ -50,16 +50,20 @@ if (!isset($faculty_divisions) || !is_array($faculty_divisions)) {
 }
 
 if (!isset($faculty_name)) {
-    $faculty_name = trim((string)($fac_row['full_name'] ?? $_SESSION['full_name'] ?? $_SESSION['name'] ?? 'Faculty Mentor'));
+    $faculty_name = trim((string)($fac_row['full_name'] ?? $_SESSION['full_name'] ?? $_SESSION['name'] ?? 'Dr. Sachin Tiwari'));
 }
+
+// Default display name
+if ($faculty_name === 'Dr.Sachin Tiwari') {
+    $faculty_display_name = 'Dr. Sachin Tiwari';
+} else {
+    $faculty_display_name = $faculty_name;
+}
+
+$faculty_dept = !empty($fac_row['department']) ? $fac_row['department'] : 'School of Computer Engineering';
 
 if (!isset($faculty_division)) {
-    $faculty_division = !empty($faculty_divisions) ? implode(', ', $faculty_divisions) : 'Faculty Guide';
-}
-
-if (!isset($faculty_initial)) {
-    $faculty_name_clean = preg_replace('/^(Prof\.?|Dr\.?|Professor)\s*/i', '', $faculty_name);
-    $faculty_initial = strtoupper(substr($faculty_name_clean ?: $faculty_name ?: 'F', 0, 1));
+    $faculty_division = !empty($faculty_divisions) ? implode(', ', $faculty_divisions) : 'SY-1';
 }
 
 // Form division SQL for pending badge calculation
@@ -102,26 +106,35 @@ function f_active($page, $current)
             <div class="sidebar-crest-row">
                 <img src="../assets/images/mit_adt_crest.png" alt="MIT-ADT Crest" class="sidebar-crest-img" onerror="this.src='../assets/images/MIT_LOGO.jpg'">
                 <div class="sidebar-crest-text">
-                    <div class="sidebar-crest-title">MIT-ADT University</div>
+                    <div class="sidebar-crest-title">MIT-ADT UNIVERSITY</div>
                     <div class="sidebar-crest-subtitle">PUNE, INDIA</div>
                 </div>
             </div>
-            <div class="sidebar-gold-line"></div>
+            
+            <!-- Sub-Brand: InternHub University Collaboration Portal -->
+            <div class="sidebar-subbrand">
+                <div class="sidebar-subbrand-icon">
+                    <i class="fa-solid fa-briefcase"></i>
+                </div>
+                <div class="sidebar-subbrand-text">
+                    <span class="sidebar-subbrand-name">InternHub</span>
+                    <span class="sidebar-subbrand-tag">University Collaboration Portal</span>
+                </div>
+            </div>
         </div>
 
         <!-- Faculty Profile Card -->
         <div class="sidebar-profile-card">
-            <div class="sidebar-avatar-circle"><?php echo h($faculty_initial); ?></div>
+            <img src="../assets/images/faculty_sachin.jpg" alt="<?php echo h($faculty_display_name); ?>" class="sidebar-avatar-img" onerror="this.src='../assets/images/LOGO2.png'">
             <div class="sidebar-profile-meta">
-                <div class="sidebar-profile-name" title="<?php echo h($faculty_name); ?>"><?php echo h($faculty_name); ?></div>
-                <div class="sidebar-profile-role">Faculty Guide / Mentor</div>
-                <div class="sidebar-profile-division"><?php echo h($faculty_division); ?></div>
+                <div class="sidebar-profile-name" title="<?php echo h($faculty_display_name); ?>"><?php echo h($faculty_display_name); ?></div>
+                <div class="sidebar-profile-role">Faculty</div>
             </div>
+            <i class="fa-solid fa-chevron-down sidebar-profile-chevron"></i>
         </div>
 
-        <!-- Navigation Menu -->
+        <!-- Navigation Menu (Unified list matching reference) -->
         <div class="sidebar-nav-container">
-            <div class="sidebar-nav-section-title">Workspace</div>
             <ul class="sidebar-nav-list">
                 <li<?php echo f_active('dashboard.php', $activePage); ?>>
                     <a href="dashboard.php">
@@ -131,17 +144,11 @@ function f_active($page, $current)
                 </li>
                 <li<?php echo f_active('internship_oversight.php', $activePage); ?>>
                     <a href="internship_oversight.php">
-                        <i class="fa-solid fa-clipboard-check"></i>
+                        <i class="fa-solid fa-briefcase"></i>
                         <span>Internship Oversight</span>
                         <?php if ($pending_apps_count > 0): ?>
                             <span class="sidebar-badge sidebar-badge-count"><?php echo $pending_apps_count; ?></span>
                         <?php endif; ?>
-                    </a>
-                </li>
-                <li<?php echo f_active('student_directory.php', $activePage); ?>>
-                    <a href="student_directory.php">
-                        <i class="fa-solid fa-users"></i>
-                        <span>Student Directory</span>
                     </a>
                 </li>
                 <li<?php echo f_active('student_portfolios.php', $activePage); ?>>
@@ -150,15 +157,21 @@ function f_active($page, $current)
                         <span>Student Portfolios</span>
                     </a>
                 </li>
+                <li<?php echo f_active('student_directory.php', $activePage); ?>>
+                    <a href="student_directory.php">
+                        <i class="fa-solid fa-users"></i>
+                        <span>Student Directory</span>
+                    </a>
+                </li>
                 <li<?php echo f_active('evaluations_marks.php', $activePage); ?>>
                     <a href="evaluations_marks.php">
-                        <i class="fa-solid fa-graduation-cap"></i>
+                        <i class="fa-solid fa-clipboard-check"></i>
                         <span>Evaluations & Marks</span>
                     </a>
                 </li>
                 <li<?php echo f_active('reports_analytics.php', $activePage); ?>>
                     <a href="reports_analytics.php">
-                        <i class="fa-solid fa-chart-pie"></i>
+                        <i class="fa-solid fa-chart-column"></i>
                         <span>Reports & Analytics</span>
                     </a>
                 </li>
@@ -171,10 +184,6 @@ function f_active($page, $current)
                         <?php endif; ?>
                     </a>
                 </li>
-            </ul>
-
-            <div class="sidebar-nav-section-title">AI & Support</div>
-            <ul class="sidebar-nav-list">
                 <li<?php echo f_active('ai_assistant.php', $activePage); ?>>
                     <a href="ai_assistant.php">
                         <i class="fa-solid fa-wand-magic-sparkles"></i>
@@ -216,52 +225,55 @@ function f_active($page, $current)
 
     <!-- Main Content Shell -->
     <main class="main" id="mainContent">
-        <!-- Universal Topbar -->
+        <!-- Universal Topbar matching media_1794939092717.jpg -->
         <header class="topbar">
             <div style="display: flex; align-items: center; gap: 14px;">
                 <button type="button" class="mobile-menu-toggle" id="facultyMenuToggle" aria-label="Toggle Navigation">
                     <i class="fa-solid fa-bars"></i>
                 </button>
                 <div class="topbar-left">
+                    <div class="topbar-greeting-over">Welcome Back,</div>
                     <div class="topbar-greeting-name">
-                        <span>Good morning, <?php echo h($faculty_name); ?></span>
+                        <span><?php echo h($faculty_display_name); ?></span>
                         <span>👋</span>
                     </div>
-                    <div class="topbar-greeting-small">Welcome to your mentorship workspace</div>
+                    <div class="topbar-greeting-sub">Faculty • <?php echo h($faculty_dept); ?></div>
                 </div>
             </div>
 
-            <!-- Global Search -->
+            <!-- Global Search Pill with Right Icon -->
             <form action="student_directory.php" method="GET" class="topbar-search-wrap">
+                <input type="text" name="q" id="globalSearchInput" class="topbar-search-input" placeholder="Search students, internships, projects..." autocomplete="off">
                 <i class="fa-solid fa-magnifying-glass topbar-search-icon"></i>
-                <input type="text" name="q" id="globalSearchInput" class="topbar-search-input" placeholder="Search students, PRN, companies, skills..." autocomplete="off">
-                <span class="topbar-search-shortcut">Ctrl K</span>
             </form>
 
             <!-- Topbar Right Actions -->
             <div class="topbar-right">
-                <a href="manage_notifications.php" class="topbar-btn" title="Notifications">
+                <a href="manage_notifications.php" class="topbar-bell-btn" title="Notifications">
                     <i class="fa-regular fa-bell"></i>
                     <?php if ($unread_notif_count > 0): ?>
-                        <span class="topbar-btn-badge"><?php echo $unread_notif_count; ?></span>
+                        <span class="topbar-bell-dot"></span>
                     <?php endif; ?>
                 </a>
 
                 <div class="topbar-user-menu">
                     <button type="button" class="topbar-user-btn" id="topbarUserDropdownTrigger">
-                        <div class="topbar-user-avatar"><?php echo h($faculty_initial); ?></div>
-                        <span class="topbar-user-name"><?php echo h($faculty_name_clean ?: $faculty_name); ?></span>
-                        <i class="fa-solid fa-chevron-down" style="font-size: 0.72rem; color: #94a3b8; margin-left: 2px;"></i>
+                        <img src="../assets/images/faculty_sachin.jpg" alt="<?php echo h($faculty_display_name); ?>" class="topbar-user-avatar" onerror="this.src='../assets/images/LOGO2.png'">
+                        <div class="topbar-user-meta">
+                            <span class="topbar-user-name"><?php echo h($faculty_display_name); ?></span>
+                            <span class="topbar-user-role">Faculty</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-down topbar-user-chevron"></i>
                     </button>
 
                     <div class="user-dropdown-popover" id="topbarUserDropdownPopover">
-                        <div style="padding: 6px 12px 8px; border-bottom: 1px solid #f1f5f9;">
-                            <div style="font-size: 0.82rem; font-weight: 700; color: #1e1b4b;"><?php echo h($faculty_name); ?></div>
-                            <div style="font-size: 0.72rem; color: #64748b;"><?php echo h($faculty_division); ?></div>
+                        <div style="padding: 8px 12px 10px; border-bottom: 1px solid #f1f5f9;">
+                            <div style="font-size: 0.84rem; font-weight: 700; color: #1e1b4b;"><?php echo h($faculty_display_name); ?></div>
+                            <div style="font-size: 0.72rem; color: #64748b;"><?php echo h($faculty_dept); ?> (<?php echo h($faculty_division); ?>)</div>
                         </div>
                         <a href="student_directory.php" class="user-dropdown-item"><i class="fa-solid fa-users"></i>Student Directory</a>
-                        <a href="internship_oversight.php" class="user-dropdown-item"><i class="fa-solid fa-clipboard-check"></i>Applications</a>
-                        <a href="evaluations_marks.php" class="user-dropdown-item"><i class="fa-solid fa-award"></i>Evaluations</a>
+                        <a href="internship_oversight.php" class="user-dropdown-item"><i class="fa-solid fa-briefcase"></i>Applications</a>
+                        <a href="evaluations_marks.php" class="user-dropdown-item"><i class="fa-solid fa-clipboard-check"></i>Evaluations</a>
                         <div class="user-dropdown-divider"></div>
                         <a href="change_password.php" class="user-dropdown-item"><i class="fa-solid fa-key"></i>Change Password</a>
                         <a href="help.php" class="user-dropdown-item"><i class="fa-solid fa-circle-question"></i>Help & Support</a>
