@@ -11,9 +11,9 @@
 <script>
 (function () {
     function setupMobileSidebar() {
-        const sidebar = document.getElementById('appSidebar');
-        const backdrop = document.getElementById('sidebarBackdrop');
-        const toggle = document.getElementById('mobileMenuToggle');
+        const sidebar = document.getElementById('adminSidebar') || document.getElementById('appSidebar');
+        const backdrop = document.getElementById('adminSidebarBackdrop') || document.getElementById('sidebarBackdrop');
+        const toggle = document.getElementById('adminMenuToggle') || document.getElementById('mobileMenuToggle');
         if (!sidebar || !backdrop || !toggle) return;
         function openSidebar() {
             sidebar.classList.add('open');
@@ -42,29 +42,26 @@
             if (window.innerWidth > 992) closeSidebar();
         });
     }
-    /* -----------------------------------------------------------------
-       NEW (post-implementation audit — exact sidebar requirement):
-       makes the profile-mini block a real functional dropdown toggle
-       for Change Password / Settings / Logout / Risk Insights /
-       Export Students, which were moved out of the primary nav.
-       ----------------------------------------------------------------- */
+
     function setupProfileDropdown() {
-        const trigger = document.getElementById('profileTrigger');
-        const dropdown = document.getElementById('profileDropdown');
+        const trigger = document.getElementById('topbarUserDropdownTrigger') || document.getElementById('profileTrigger');
+        const dropdown = document.getElementById('topbarUserDropdownPopover') || document.getElementById('profileDropdown');
         if (!trigger || !dropdown) return;
 
         function closeDropdown() {
             dropdown.classList.remove('open');
+            dropdown.style.display = 'none';
             trigger.setAttribute('aria-expanded', 'false');
         }
         function openDropdown() {
             dropdown.classList.add('open');
+            dropdown.style.display = 'block';
             trigger.setAttribute('aria-expanded', 'true');
         }
 
         trigger.addEventListener('click', function (e) {
             e.stopPropagation();
-            if (dropdown.classList.contains('open')) {
+            if (dropdown.classList.contains('open') || dropdown.style.display === 'block') {
                 closeDropdown();
             } else {
                 openDropdown();
@@ -72,7 +69,7 @@
         });
 
         document.addEventListener('click', function (e) {
-            if (!dropdown.contains(e.target) && e.target !== trigger) {
+            if (!dropdown.contains(e.target) && !trigger.contains(e.target)) {
                 closeDropdown();
             }
         });

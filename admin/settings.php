@@ -1,4 +1,17 @@
 <?php
+// --- Legacy Router Bridge ---
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    $target = 'system_settings.php';
+    $qs = $_SERVER['QUERY_STRING'] ?? '';
+    if (!empty($qs)) {
+        $sep = (strpos($target, '?') !== false) ? '&' : '?';
+        $target .= $sep . $qs;
+    }
+    header("Location: " . $target);
+    exit();
+}
+// --- End Legacy Router Bridge ---
+
 
 session_start();
 include("../config.php");

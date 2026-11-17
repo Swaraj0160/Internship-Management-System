@@ -1,4 +1,17 @@
 <?php
+// --- Legacy Router Bridge ---
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    $target = 'internship_oversight.php?status=Pending';
+    $qs = $_SERVER['QUERY_STRING'] ?? '';
+    if (!empty($qs)) {
+        $sep = (strpos($target, '?') !== false) ? '&' : '?';
+        $target .= $sep . $qs;
+    }
+    header("Location: " . $target);
+    exit();
+}
+// --- End Legacy Router Bridge ---
+
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 session_start();
