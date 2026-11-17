@@ -51,6 +51,10 @@ if($ac_res2) $action_center_count += mysqli_fetch_assoc($ac_res2)['c'];
 $ac_res3 = mysqli_query($conn, "SELECT COUNT(*) as c FROM internships WHERE status = 'Rejected'");
 if($ac_res3) $action_center_count += mysqli_fetch_assoc($ac_res3)['c'];
 
+$pending_faculty_count = 0;
+$pfc_res = mysqli_query($conn, "SELECT COUNT(*) as c FROM faculty_approval_requests WHERE status = 'pending'");
+if($pfc_res) $pending_faculty_count = (int)mysqli_fetch_assoc($pfc_res)['c'];
+
 $activePage = $activePage ?? '';
 
 function sb_active($page, $current)
@@ -92,10 +96,12 @@ function sb_active($page, $current)
             <a href="manage_students.php"<?php echo sb_active('manage_students.php', $activePage); ?>><i class="fa-solid fa-users"></i>Manage Students</a>
             <a href="student_showcase.php"<?php echo sb_active('student_showcase.php', $activePage); ?>><i class="fa-solid fa-diagram-project"></i>Student Internship Work</a>
             <a href="manage_faculty.php"<?php echo sb_active('manage_faculty.php', $activePage); ?>><i class="fa-solid fa-user-tie"></i>Manage Faculty</a>
+            <a href="faculty_requests.php"<?php echo sb_active('faculty_requests.php', $activePage); ?> style="justify-content: space-between;"><span style="display:flex;align-items:center;gap:11px;"><i class="fa-solid fa-user-clock"></i>Faculty Requests</span><?php if($pending_faculty_count > 0): ?> <span class="badge" style="background:#8b5cf6; color:#fff; padding:3px 8px; border-radius:12px; font-size:0.7rem; font-weight:800;"><?php echo $pending_faculty_count; ?></span><?php endif; ?></a>
             <a href="all_internships.php"<?php echo sb_active('all_internships.php', $activePage); ?>><i class="fa-solid fa-list-check"></i>All Internships</a>
             <a href="view_updates.php"<?php echo sb_active('view_updates.php', $activePage); ?>><i class="fa-solid fa-calendar-days"></i>Weekly Reports</a>
             <a href="student_evaluations.php"<?php echo sb_active('student_evaluations.php', $activePage); ?>><i class="fa-solid fa-clipboard-check"></i>Student Evaluations</a>
             <a href="reports.php"<?php echo sb_active('reports.php', $activePage); ?>><i class="fa-solid fa-chart-line"></i>Reports</a>
+            <a href="storage_monitoring.php"<?php echo sb_active('storage_monitoring.php', $activePage); ?>><i class="fa-solid fa-cloud-arrow-up"></i>Storage & Quotas</a>
             <a href="manage_notifications.php"<?php echo sb_active('manage_notifications.php', $activePage); ?>><i class="fa-solid fa-bell"></i>Notifications</a>
         </nav>
     </aside>

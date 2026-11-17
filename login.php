@@ -7,7 +7,7 @@ $loginError = "";
 
 if(isset($_POST['login']))
 {
-    $email = mysqli_real_escape_string($conn, trim($_POST['email']));
+    $email = strtolower(trim($_POST['email']));
     $password = $_POST['password'];
     $selectedRole = isset($_POST['role']) ? strtolower(trim($_POST['role'])) : 'student';
 
@@ -56,6 +56,27 @@ if(isset($_POST['login']))
                     if($row['role'] !== $selectedRole)
                     {
                         $loginError = "This account is registered as " . ucfirst($row['role']) . ". Please switch to the " . ucfirst($row['role']) . " tab to sign in.";
+                    }
+                }
+
+                // Check account status lifecycle
+                if(empty($loginError) && isset($row['account_status']) && $row['account_status'] !== 'active')
+                {
+                    if($row['account_status'] === 'pending_verification')
+                    {
+                        $loginError = "Your email address is not verified yet. Please check your inbox for the verification link.";
+                    }
+                    elseif($row['account_status'] === 'pending_approval')
+                    {
+                        $loginError = "Your faculty registration is awaiting administrator approval. You will receive an email once approved.";
+                    }
+                    elseif($row['account_status'] === 'rejected')
+                    {
+                        $loginError = "Your registration request was not approved. Please contact the administrator.";
+                    }
+                    elseif($row['account_status'] === 'suspended')
+                    {
+                        $loginError = "Your account has been temporarily suspended. Please contact the administrator.";
                     }
                 }
 
@@ -1235,6 +1256,16 @@ if(isset($_POST['login']))
                         <span>Sign In</span>
                         <i class="bi bi-arrow-right"></i>
                     </button>
+
+                    <!-- Student & Faculty Sign Up Routes (Phase 2 & 13) -->
+                    <div class="signup-prompt-area" id="signupPromptArea" style="margin-top: 15px; text-align: center; font-size: 0.84rem; color: #64748b;">
+                        <span>New to InternHub?</span>
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 5px;">
+                            <a href="student_register.php" style="color: #6d28d9; font-weight: 700; text-decoration: none;">Student Sign Up</a>
+                            <span style="color: #cbd5e1; font-size: 0.75rem;">•</span>
+                            <a href="faculty_register.php" style="color: #43248b; font-weight: 600; text-decoration: none;">Faculty Sign Up</a>
+                        </div>
+                    </div>
                 </form>
 
                 <!-- Card Footer -->

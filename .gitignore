@@ -1,7 +1,10 @@
 # Configuration & Environment
 config.php
+config/storage_config.php
 .env
 .env.*
+backups/
+logs/
 
 # Uploads & User Generated Content
 uploads/*
@@ -22,6 +25,7 @@ uploads/profile_photos/*
 *.sql.gz
 *.dump
 !database/schema.sql
+!database/migrations/*.sql
 
 # Real Student Records, Rosters & Marksheets
 *.xlsx
