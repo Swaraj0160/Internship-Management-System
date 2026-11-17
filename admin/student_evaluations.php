@@ -1,7 +1,7 @@
 <?php
 // --- Legacy Router Bridge ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-    $target = 'internship_oversight.php?tab=evaluations';
+    $target = 'internship_marks.php';
     $qs = $_SERVER['QUERY_STRING'] ?? '';
     if (!empty($qs)) {
         $sep = (strpos($target, '?') !== false) ? '&' : '?';

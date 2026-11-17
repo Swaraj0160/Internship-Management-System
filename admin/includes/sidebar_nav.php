@@ -118,6 +118,12 @@ function adm_active($page, $current)
                         <?php endif; ?>
                     </a>
                 </li>
+                <li<?php echo adm_active('internship_marks.php', $activePage); ?>>
+                    <a href="internship_marks.php">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                        <span>Internship Marks & Evaluation</span>
+                    </a>
+                </li>
                 <li<?php echo adm_active('community_moderation.php', $activePage); ?>>
                     <a href="community_moderation.php">
                         <i class="fa-solid fa-shield-halved"></i>
